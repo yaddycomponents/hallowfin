@@ -1,3 +1,10 @@
 node_modules
 dist
 .DS_Store
+
+# Blender sources (large); rebuild public/models/guard.glb with tools/rig_guard.py, see README
+assets-src/
+
+# local secrets, never commit
+.env
+.env.*

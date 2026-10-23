@@ -7,7 +7,8 @@ import { Shapes } from './Shapes'
 import { FlapReel, FlapText } from './FlapBoard'
 import { toggleFull, useFullscreen } from './fullscreen'
 import { IconBtn } from './IconBtn'
-import { Eye, EyeOff, Maximize, Mic, MicOff, Minimize, PiggyBank, Volume2, VolumeX } from 'lucide-react'
+import { ShapeBtn } from './ShapeBtn'
+import { Crosshair, Eye, EyeOff, Home, Maximize, Mic, MicOff, Minimize, PiggyBank, Volume2, VolumeX } from 'lucide-react'
 
 gsap.registerPlugin(useGSAP, SplitText)
 
@@ -172,11 +173,24 @@ export function Light({ red, reading }) {
   )
 }
 
-export function QuestionPanel({ question, player, seconds, left, phase, stage, micOn, mic, heard, onVerdict }) {
+// Red light: the guard is aiming. The bar drains over `grace` seconds; the
+// host can still press O to spare the player before it runs out.
+function ShootBar({ grace }) {
+  return (
+    <div className="shoot">
+      <Crosshair size={16} />
+      <span className="shoot-label">Guard is aiming <kbd>A</kbd> to spare</span>
+      <span className="shoot-track"><i style={{ animationDuration: `${grace}s` }} /></span>
+    </div>
+  )
+}
+
+export function QuestionPanel({ question, player, seconds, left, phase, stage, micOn, hard, mic, heard, grace, onVerdict }) {
   const [reveal, setReveal] = useState(false)
   const red = phase === 'redlight'
   const reading = stage === 'reading' && !red
   const matched = stage === 'matched'
+  const wrong = stage === 'wrong'
 
   useEffect(() => {
     const k = (e) => {
@@ -189,8 +203,9 @@ export function QuestionPanel({ question, player, seconds, left, phase, stage, m
   }, [onVerdict])
 
   const micLine = matched ? `Heard it: “${heard}”`
-    : reading ? 'The mic opens after the question'
-    : MIC_SAYS[mic] ?? (heard ? `“${heard}”` : 'Listening… say your answer')
+    : wrong ? `Wrong: “${heard}”`
+    : reading ? (hard ? 'Talk all you want: only your last answer counts' : 'The mic opens after the question')
+    : MIC_SAYS[mic] ?? (heard ? (hard ? `Last answer: “${heard}”` : `“${heard}”`) : hard ? 'Listening… your last answer counts' : 'Listening… say your answer')
 
   return (
     <>
@@ -208,7 +223,8 @@ export function QuestionPanel({ question, player, seconds, left, phase, stage, m
             )}
           </div>
           <p className="q-text">{question.q}</p>
-          {micOn && !red && <p className={`mic ${matched ? 'hit' : mic}`}><span className="mic-dot" />{micLine}</p>}
+          {micOn && !red && <p className={`mic ${matched ? 'hit' : wrong ? 'miss' : mic}`}><span className="mic-dot" />{micLine}</p>}
+          {red && <ShootBar grace={grace} />}
         </div>
         <div className="votes">
           <Vote kind="o" label="Pass" keyName="A" onClick={() => onVerdict('answered')} />
@@ -228,7 +244,8 @@ export function Stamp({ kind, small }) {
 export function PenaltyCard({ dare, player, onShown, onNext, shown }) {
   const root = useRef()
   useGSAP(() => {
-    gsap.timeline({ delay: 1.5 })
+    // after the guard's shot (~1.3 s in) has landed
+    gsap.timeline({ delay: 2.3 })
       .from('.pen-card', { y: innerHeight, rotation: 28, rotationX: 55, scale: 1.4, duration: 0.85, ease: 'power4.out' })
       .from('.pen-shadow', { opacity: 0, duration: 0.6 }, '<')
       .to('.pen-card .biz-inner', { rotationY: 180, duration: 0.85, ease: 'back.inOut(1.3)' }, '+=0.35')
@@ -247,7 +264,7 @@ export function PenaltyCard({ dare, player, onShown, onNext, shown }) {
           </div>
         </div>
       </div>
-      {shown && <button className="primary big" onClick={onNext}>Next player <kbd>Space</kbd></button>}
+      {shown && <ShapeBtn shape="next" label="Next player" keyName="Space" onClick={onNext} />}
     </div>
   )
 }
@@ -266,10 +283,10 @@ export function End({ log, onLobby, onAgain }) {
         ))}
       </ul>
       <div className="end-btns">
-        <button className="ghost" onClick={onLobby}>Lobby</button>
-        <button className="primary" onClick={onAgain}>New game</button>
+        <IconBtn icon={Home} label="Back to the lobby" onClick={onLobby} />
+        <ShapeBtn shape="next" label="New game" onClick={onAgain} />
       </div>
-      <p className="credit">Doll model: "Squid Game Doll Rig" by Bug All (CC-BY), Sketchfab</p>
+      <p className="credit">Doll model: "Squid Game Doll Rig" by Bug All (CC-BY), Sketchfab · Guard model: "Squid Game Pink Soldier" by Protyanik25 (CC-BY), Sketchfab</p>
     </div>
   )
 }

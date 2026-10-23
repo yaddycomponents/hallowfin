@@ -65,6 +65,9 @@ function Tree(props) {
   const branches = useMemo(() => {
     const out = []
     const grow = (x, y, z, ry, tilt, len, r, depth) => {
+      // branches spread sideways and back, never toward the players, so none
+      // crosses in front of the doll (a branch heads along (cos ry, sin ry) in x/z)
+      if (Math.sin(ry) > 0) ry = -ry
       out.push({ x, y, z, ry, tilt, len, r })
       if (depth === 0) return
       const ex = x + Math.sin(tilt) * Math.cos(ry) * len
@@ -122,7 +125,8 @@ export function Field() {
           <meshBasicMaterial map={skyTex} toneMapped={false} />
         </mesh>
       ))}
-      <Tree position={[2.2, 0, -21]} />
+      {/* behind her, as on the show's field */}
+      <Tree position={[2.6, 0, -23.5]} scale={1.2} />
     </group>
   )
 }

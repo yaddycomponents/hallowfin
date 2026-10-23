@@ -40,6 +40,7 @@ export const DEFAULTS = {
   mic: true, // players answer out loud (Chrome speech recognition)
   voice: true, // the doll reads questions and calls players
   lang: 'en-IN', // recogniser accent
+  hard: true, // one shot: the first thing a player says is their answer, matched strictly
 }
 
 const KEY = 'halloween-dare:v1'
@@ -62,9 +63,11 @@ export function save(state) {
 export function parseMd(text) {
   const out = { players: [], questions: [], dares: [] }
   let section = 'players'
+  // <!-- comments --> (like the AI prompt in the template) may span many lines
+  text = text.replace(/<!--[\s\S]*?(-->|$)/g, '')
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim()
-    if (!line || line.startsWith('<!--')) continue
+    if (!line) continue
     const h = line.match(/^#{1,6}\s*(.+)$/)
     if (h) {
       const t = h[1].toLowerCase()
@@ -81,7 +84,39 @@ export function parseMd(text) {
   return out
 }
 
-export const TEMPLATE = `# Players
+export const TEMPLATE = `<!--
+  Squid Dare list. Fill it in by hand, or paste this prompt into any AI
+  together with your team's names, and save its answer as this file.
+  Numbers are given by the game: list names only.
+
+  ───────────────────────── prompt ─────────────────────────
+  Make a Markdown file for a Squid Game–themed office Halloween quiz.
+  Output ONLY the Markdown, exactly in this format:
+
+  # Players
+  - <full name>
+  (one bullet per person, names only: no numbers, no titles, no emojis)
+
+  # Questions
+  - <question>? | <answer>
+  (25 questions. Mix Halloween, horror films, and Squid Game trivia.
+   Answers must be easy to SAY out loud and short: 1–3 words.
+   No symbols or currencies (write "45 billion won", not "₩45.6B").
+   Write numbers as digits ("456").
+   If there are several right answers, separate them with " / ",
+   e.g. "Young-hee / Younghee". Avoid trick questions.)
+
+  # Dares
+  - <dare>
+  (10 harmless, office-safe dares using sour candy or lemon,
+   each doable in under 30 seconds at a desk.)
+
+  Here are our team's names:
+  <paste your team's names here>
+  ──────────────────────────────────────────────────────────
+-->
+
+# Players
 - Full Name One
 - Full Name Two
 
@@ -101,10 +136,25 @@ export function splitQuestion(q) {
   return i < 0 ? { q, a: null } : { q: q.slice(0, i), a: q.slice(i + 3) }
 }
 
-// Every name gets a stable 3-digit player number, like the tracksuits
-export function playerNo(name) {
+// Every name gets a stable 3-digit player number, like the tracksuits: a hash
+// of the name, moved on to the next free number if someone else has it, so
+// no two players on the roster share one (the doll calls numbers, not names)
+const hashNo = (name) => {
   let h = 7
   for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0
-  return String((h % 456) + 1).padStart(3, '0')
+  return h % 456
 }
+let roster = new Map()
+export function setRoster(players) {
+  roster = new Map()
+  const taken = new Set()
+  for (const name of players) {
+    if (roster.has(name)) continue
+    let k = hashNo(name)
+    while (taken.has(k)) k = (k + 1) % 456
+    taken.add(k)
+    roster.set(name, String(k + 1).padStart(3, '0'))
+  }
+}
+export const playerNo = (name) => roster.get(name) ?? String(hashNo(name) + 1).padStart(3, '0')
 

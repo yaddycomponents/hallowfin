@@ -5,7 +5,7 @@
 //   public/audio/redlight.mp3  — plays while the question timer runs (the doll's song)
 
 let ctx = null
-const ac = () => (ctx ??= new (window.AudioContext || window.webkitAudioContext)())
+export const ac = () => (ctx ??= new (window.AudioContext || window.webkitAudioContext)())
 
 function tone({ f = 440, f2, type = 'sine', dur = 0.15, vol = 0.3, at = 0 }) {
   const c = ac()
@@ -46,8 +46,15 @@ export const sfx = {
   land: () => { tone({ f: 110, f2: 55, type: 'triangle', dur: 0.9, vol: 0.5 }); tone({ f: 660, dur: 0.6, vol: 0.12 }) },
   heart: () => { tone({ f: 70, f2: 40, dur: 0.14, vol: 0.7 }); tone({ f: 60, f2: 35, dur: 0.16, vol: 0.5, at: 0.18 }) },
   turn: () => noise({ dur: 0.45, vol: 0.25, lp: 3000 }),
-  // the elimination: a sharp crack and a low boom
-  eliminated: () => { noise({ dur: 0.25, vol: 0.9, lp: 6000 }); tone({ f: 90, f2: 30, type: 'sawtooth', dur: 1.2, vol: 0.35, at: 0.05 }) },
+  // the elimination: a low, falling drone (the guard's shot follows)
+  eliminated: () => tone({ f: 90, f2: 30, type: 'sawtooth', dur: 1.2, vol: 0.3 }),
+  // the rifle: a bright crack, a thump, and the field echoing it back
+  gunshot: () => {
+    noise({ dur: 0.16, vol: 1, lp: 9000 })
+    tone({ f: 140, f2: 40, dur: 0.35, vol: 0.7 })
+    noise({ dur: 1.1, vol: 0.35, lp: 600, at: 0.03 })
+    noise({ dur: 0.5, vol: 0.12, lp: 2500, at: 0.28 })
+  },
   survived: () => [523, 659, 784, 1047].forEach((f, i) => tone({ f, type: 'triangle', dur: 0.4, vol: 0.18, at: i * 0.09 })),
   unlock: () => ac().resume(),
 }

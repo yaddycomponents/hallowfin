@@ -33,15 +33,22 @@ function lev(a, b) {
 // how many letters can be off: none for short words, more for long ones
 const slack = (w) => (w.length >= 9 ? 2 : w.length >= 6 ? 1 : 0)
 
-const close = (want, got) => got.some((g) => lev(want, g) <= slack(want) || (want.length >= 6 && g.startsWith(want.slice(0, -1))))
+const near = (want, got) => got.some((g) => lev(want, g) <= slack(want) || (want.length >= 6 && g.startsWith(want.slice(0, -1))))
+// hard mode: the word itself, spelled the way the recogniser spells it
+const exact = (want, got) => got.includes(want)
+
+// did they say anything at all (not just "um", a cough, "the")?
+export const saidSomething = (text) => words(text).length > 0
 
 export function alternatives(answer) {
   return answer.split(/\s+\/\s+|;/).map((a) => a.trim()).filter(Boolean)
 }
 
-// transcripts: what the recogniser heard (its best guess and alternatives)
-export function heardAnswer(answer, transcripts) {
+// transcripts: what the recogniser heard (its best guess and alternatives).
+// strict: no spelling slack (hard mode)
+export function heardAnswer(answer, transcripts, { strict = false } = {}) {
   if (!answer) return false
+  const close = strict ? exact : near
   const heard = transcripts.flatMap((t) => words(t))
   // also allow two spoken words run together ("upside down" → "upsidedown")
   const pairs = heard.slice(1).map((w, i) => heard[i] + w)

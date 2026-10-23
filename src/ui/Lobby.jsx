@@ -7,7 +7,8 @@ import { sfx } from '../audio/sound'
 import { enterFull, toggleFull, useFullscreen } from './fullscreen'
 import { IconBtn } from './IconBtn'
 import { Shapes } from './Shapes'
-import { FolderOpen, Maximize, Minimize, Upload } from 'lucide-react'
+import { FileDown, FolderOpen, Maximize, Minimize, RotateCcw, Upload } from 'lucide-react'
+import { ShapeBtn } from './ShapeBtn'
 
 gsap.registerPlugin(useGSAP)
 
@@ -128,6 +129,11 @@ export function Lobby({ config, setConfig, onStart, canResume, onResume }) {
                   {config.seconds}s
                   <button onClick={() => setConfig((c) => ({ ...c, seconds: Math.min(120, c.seconds + 5) }))}>+</button>
                 </span>
+                <button
+                  className={`mode-btn ${config.hard ? 'hard' : ''}`}
+                  title={config.hard ? 'Hard: talk till time runs out, only the last answer counts, exact words. Click for easy' : 'Easy: keeps listening, forgives spelling. Click for hard'}
+                  onClick={() => setConfig((c) => ({ ...c, hard: !c.hard }))}
+                >{config.hard ? 'Hard' : 'Easy'}</button>
               </div>
 
               <div className="biz-actions">
@@ -186,26 +192,32 @@ function Files({ config, setConfig, onClose, readFile }) {
   return (
     <div className="files-wrap" onClick={() => { commit(); onClose() }}>
       <div className="files" ref={panel} onClick={(e) => e.stopPropagation()}>
+        {/* the Front Man's monitor: who's playing, what's asked, what it costs */}
+        <div className="files-head">
+          <Shapes className="files-logo" />
+          <b>Player files</b>
+          <span>Stays on this computer</span>
+        </div>
         <div className="cols">
           {[
-            ['players', '○ Players', 'One full name per line'],
-            ['questions', '△ Questions', 'Question | answer (the answer is for the host)'],
-            ['dares', '□ Penalties', 'One dare per line'],
-          ].map(([key, title, hint]) => (
+            ['players', 'o', 'Players', 'One full name per line'],
+            ['questions', 't', 'Questions', 'Question | answer (the answer is for the host)'],
+            ['dares', 's', 'Penalties', 'One dare per line'],
+          ].map(([key, shape, title, hint]) => (
             <label key={key} className="col">
-              <span className="col-head">{title} <b>{counts[key]}</b></span>
+              <span className="col-head"><i className={`glyph ${shape}`} />{title} <b>{String(counts[key]).padStart(2, '0')}</b></span>
               <textarea value={text[key]} onChange={edit(key)} onBlur={() => commit()} spellCheck={false} />
               <span className="hint">{hint}</span>
             </label>
           ))}
         </div>
         <div className="files-foot">
-          <button className="ghost" onClick={() => file.current.click()}>Upload .md</button>
-          <button className="ghost" onClick={downloadTemplate}>Template</button>
-          <button className="ghost" onClick={() => { const t = { players: DEFAULTS.players.join('\n'), questions: DEFAULTS.questions.join('\n'), dares: DEFAULTS.dares.join('\n') }; setText(t); commit(t) }}>Reset lists</button>
+          <IconBtn icon={Upload} label="Upload a .md list" onClick={() => file.current.click()} />
+          <IconBtn icon={FileDown} label="Download the .md template" onClick={downloadTemplate} />
+          <IconBtn icon={RotateCcw} label="Reset to the sample lists" onClick={() => { const t = { players: DEFAULTS.players.join('\n'), questions: DEFAULTS.questions.join('\n'), dares: DEFAULTS.dares.join('\n') }; setText(t); commit(t) }} />
           <input ref={file} type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden onChange={(e) => { readFile(e.target.files[0]); e.target.value = '' }} />
           <span className="grow" />
-          <button className="primary" onClick={() => { commit(); onClose() }}>Done</button>
+          <ShapeBtn shape="o" label="Done" onClick={() => { commit(); onClose() }} />
         </div>
       </div>
     </div>

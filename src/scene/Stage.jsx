@@ -1,9 +1,10 @@
-import { Suspense, useRef } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing'
 import { Color, MathUtils, Vector3 } from 'three'
 import { Doll } from './Doll'
 import { Field } from './Field'
+import { Guard } from './Guard'
 
 // Where the camera stands in each phase: back at the start line while names
 // spin, walking up the field once someone is called, closest at red light.
@@ -14,22 +15,33 @@ const SHOTS = {
   question: { pos: [0.5, 1.7, -5], look: [0, 3.6, -18] },
   redlight: { pos: [0, 2.2, -8], look: [0, 4.6, -18] },
   survived: { pos: [0, 1.8, -5], look: [0, 4.2, -18] },
-  eliminated: { pos: [0, 2.4, -9], look: [0, 4.8, -18] },
+  eliminated: { pos: [-0.3, 1.9, -7], look: [1.4, 2.5, -15] },
   dare: { pos: [0, 1.8, -3], look: [0, 3.4, -18] },
   end: { pos: [0, 2.6, 6], look: [0, 3.6, -18] },
 }
+
+// the guard stands at the side of the field; when someone fails he shoots the
+// player standing just left of the camera (aiming straight down the lens would
+// hide the rifle end-on)
+const GUARD_AT = [1.8, 0, -10.6]
+const VICTIM_AT = [-4.2, 1.5, -8.6]
+const FIRING = new Set(['eliminated', 'dare'])
 
 const FACING = new Set(['redlight', 'survived', 'eliminated', 'dare'])
 const RED = new Set(['redlight', 'eliminated'])
 
 function Rig({ phase }) {
   const look = useRef(new Vector3(0, 2.6, -18))
-  const shot = useRef({ phase, at: -9 })
+  const shotAt = useRef(-9)
   const p = new Vector3()
+  // the shot: half a second of hard camera shake when the guard fires
+  useEffect(() => {
+    const hit = () => { shotAt.current = performance.now() / 1000 }
+    addEventListener('guard-shot', hit)
+    return () => removeEventListener('guard-shot', hit)
+  }, [])
   useFrame(({ camera, clock }, dt) => {
-    // the shot: half a second of hard camera shake when someone is eliminated
-    if (shot.current.phase !== phase) shot.current = { phase, at: phase === 'eliminated' ? clock.elapsedTime : -9 }
-    const kick = Math.max(0, 1 - (clock.elapsedTime - shot.current.at) / 0.5) ** 2 * 0.18
+    const kick = Math.max(0, 1 - (performance.now() / 1000 - shotAt.current) / 0.5) ** 2 * 0.18
     const s = SHOTS[phase] ?? SHOTS.pick
     camera.position.lerp(p.set(...s.pos), 1 - Math.exp(-dt * 1.6))
     // a slow handheld drift so the frame never sits dead still
@@ -75,6 +87,7 @@ function Lights({ phase }) {
 }
 
 export function Stage({ phase }) {
+  const [mask] = useState(() => (Math.random() < 0.5 ? 'circle' : 'square'))
   return (
     <Canvas className="stage" shadows="percentage" dpr={[1, 2]} camera={{ fov: 42, position: [0, 2.2, 6], near: 0.1, far: 200 }}>
       <color attach="background" args={['#a9d6f2']} />
@@ -85,6 +98,7 @@ export function Stage({ phase }) {
         <Field />
         {/* her back to the players; she faces down the field toward the tree */}
         <Doll position={[0, 0, -19]} rotation-y={Math.PI} facing={FACING.has(phase) ? 1 : 0} />
+        <Guard position={GUARD_AT} aimAt={VICTIM_AT} firing={FIRING.has(phase)} mask={mask} />
       </Suspense>
       <EffectComposer>
         <Bloom intensity={0.35} luminanceThreshold={0.85} mipmapBlur />

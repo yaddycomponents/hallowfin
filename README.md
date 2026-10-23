@@ -36,16 +36,40 @@ Click the logo to go back to the lobby (the game resumes where it left off).
     # Dares
     - Eat one extra-sour candy
 
-A file with no headings is read as a list of names.
+A file with no headings is read as a list of names. List names only: the game
+gives every player their own number. `<!-- comments -->` are ignored.
+
+**Generate it with AI:** the template (Player files → download icon) starts with
+a ready prompt in a comment. Paste it into any AI with your team's names; it asks
+for short, sayable answers (Hard mode matches word for word) and office-safe dares.
 
 ## Voice (Chrome)
 
-- **The doll speaks** (speechSynthesis): calls each player, reads the question,
-  announces "passed" / "eliminated" and the penalty.
+- **The announcer calls numbers only**: "Player zero six three." when a player is
+  picked, then "…, eliminated." or "…, passed." Questions and penalties are read
+  off the screen. Numbers are unique per player list.
+- **Fish Audio voice (optional)**: the announcer is 13 words strung together
+  ("player", "zero"–"nine", "eliminated", "passed"), so it works for any list.
+  In Fish's Text To Speech page, generate this in one take (one word per line)
+  and download it:
+
+      Player. Zero. One. Two. Three. Four. Five. Six. Seven. Eight. Nine. Eliminated. Passed.
+
+  then cut it at the pauses into `public/voice/parts/` (needs ffmpeg):
+
+      node tools/split_voice.mjs ~/Downloads/take.mp3
+
+  Without the clips, Chrome's voice reads the lines.
+
 - **Players answer out loud** (Web Speech recognition, `en-IN`): the mic opens
-  when she finishes reading, the transcript shows live, and hearing the answer
-  stops the clock and passes the player. Chrome sends the mic audio to
-  Google's speech service.
+  a moment after the question appears, the transcript shows live, and hearing
+  the answer stops the clock and passes the player. Chrome sends the mic audio
+  to Google's speech service.
+- **Hard mode** (default, toggle on the card): players can talk until the clock
+  runs out, and only the **last** thing they said is judged, word for word.
+  Right answer then "no wait…" = shot.
+- **Red light**: when the clock runs out a shoot bar drains for 4 s; the host can
+  press A to spare the player, otherwise the guard fires.
 - The host's A / F keys always override, for noise or odd answers.
 - `Voice` / `Mic` toggles sit top-right in the game.
 
@@ -67,6 +91,14 @@ a game exactly.
 ## Assets
 
 - `public/models/doll.glb` — "Squid Game Doll Rig" by Bug All, CC-BY (Sketchfab), compressed with gltf-transform.
+- `public/models/guard.glb` — "Squid Game Pink Soldier" by Protyanik25, CC-BY (Sketchfab). Rigged, given a rifle and a
+  shooting clip by `tools/rig_guard.py` (Blender, headless), then compressed:
+  ```
+  blender -b --python tools/rig_guard.py -- assets-src/squid_game_pink_soldier.glb assets-src/guard_rigged.glb
+  npx @gltf-transform/cli optimize assets-src/guard_rigged.glb public/models/guard.glb \
+    --texture-compress webp --compress meshopt --simplify false --join false --flatten false --prune false
+  ```
+  (`--prune false` keeps the empty "Muzzle" node the flash is placed on.)
 - `public/audio/lobby.mp3`, `public/audio/redlight.mp3` — optional music; add your own.
 - `public/fonts/GameOfSquids.ttf` — optional title font (FontSpace, freeware); falls back to Bebas Neue.
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { load, save, splitQuestion } from './data'
+import { load, save, setRoster, splitQuestion } from './data'
 import { STREAM, drawIndex, newSeed } from './pcg'
 
 // The round, as phases:
@@ -23,6 +23,7 @@ export function useGame() {
   useEffect(() => { try { localStorage.setItem(RUN_KEY, JSON.stringify(run)) } catch {} }, [run])
 
   const { players, questions, dares } = config
+  setRoster(players) // cheap; keeps player numbers unique for this list
   const n = players.length
 
   // who is called on this turn, and which question and dare they'd get
@@ -63,19 +64,23 @@ export function useGame() {
     }))
   }, [current])
 
-  const next = useCallback(() => {
-    setRun((r) => {
-      const last = r.log[r.log.length - 1]
-      const turn = r.turn + 1
-      return {
-        ...r,
-        turn,
-        qTurn: r.qTurn + 1,
-        dTurn: last?.result === 'failed' ? r.dTurn + 1 : r.dTurn,
-        phase: turn >= n ? 'end' : 'pick',
-      }
-    })
-  }, [n])
+  // after a verdict: the next turn (a new question; a new dare if they failed)
+  const advance = (r) => {
+    const last = r.log[r.log.length - 1]
+    const turn = r.turn + 1
+    return {
+      ...r,
+      turn,
+      qTurn: r.qTurn + 1,
+      dTurn: last?.result === 'failed' ? r.dTurn + 1 : r.dTurn,
+      phase: turn >= n ? 'end' : 'pick',
+    }
+  }
+  const next = useCallback(() => setRun(advance), [n])
 
-  return { config, setConfig, run, current, remaining, eliminated, won, to, start, verdict, next, lobby: () => to('lobby') }
+  // back from the lobby: if this turn's verdict is already in (they left before
+  // pressing next), move on, or the same player would be drawn again
+  const resume = useCallback(() => setRun((r) => (r.log.length > r.turn ? advance(r) : { ...r, phase: 'pick' })), [n])
+
+  return { config, setConfig, run, current, remaining, eliminated, won, to, start, verdict, next, resume, lobby: () => to('lobby') }
 }
