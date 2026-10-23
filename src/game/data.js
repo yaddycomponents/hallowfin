@@ -37,6 +37,9 @@ export const DEFAULTS = {
     'Let the person on your left pick your next sour candy',
   ],
   seconds: 20,
+  mic: true, // players answer out loud (Chrome speech recognition)
+  voice: true, // the doll reads questions and calls players
+  lang: 'en-IN', // recogniser accent
 }
 
 const KEY = 'halloween-dare:v1'

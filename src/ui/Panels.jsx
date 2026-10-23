@@ -4,11 +4,16 @@ import { Reel } from './Reel'
 
 const won = (n) => '₩' + n.toLocaleString('en-US')
 
-export function Hud({ run, remaining, total, prize, onLobby }) {
+export function Hud({ run, remaining, total, prize, onLobby, config, setConfig }) {
+  const toggle = (key) => setConfig((c) => ({ ...c, [key]: !c[key] }))
   return (
     <div className="hud">
       <button className="logo small" onClick={onLobby} title="Back to the lobby">SQU<span className="tri">△</span>D <span className="pink">DARE</span></button>
       <div className="hud-right">
+        <div className="toggles">
+          <button className={config.voice ? 'on' : ''} onClick={() => toggle('voice')} title="The doll reads questions aloud">Voice</button>
+          <button className={config.mic ? 'on' : ''} onClick={() => toggle('mic')} title="Players answer into the mic">Mic</button>
+        </div>
         <div className="stat"><span>Players left</span><b>{remaining}<i>/{total}</i></b></div>
         <div className="stat piggy"><span>Prize pool</span><b>{won(prize)}</b></div>
       </div>
@@ -58,9 +63,17 @@ export function Called({ name }) {
   )
 }
 
-export function QuestionPanel({ question, player, seconds, left, phase, onVerdict }) {
+const MIC_SAYS = {
+  denied: 'Mic blocked: allow it in Chrome, or judge with A / F',
+  unsupported: 'No speech recognition here: use Chrome, or judge with A / F',
+  offline: 'Speech service unreachable: judge with A / F',
+}
+
+export function QuestionPanel({ question, player, seconds, left, phase, stage, micOn, mic, heard, onVerdict }) {
   const [reveal, setReveal] = useState(false)
   const red = phase === 'redlight'
+  const reading = stage === 'reading' && !red
+  const matched = stage === 'matched'
 
   useEffect(() => {
     const k = (e) => {
@@ -77,7 +90,7 @@ export function QuestionPanel({ question, player, seconds, left, phase, onVerdic
     <div className={`panel question ${red ? 'red' : 'green'}`}>
       <div className="q-top">
         <span className="q-player">PLAYER {playerNo(player)} · {player}</span>
-        <span className={`light ${red ? 'red' : 'green'}`}>{red ? 'RED LIGHT' : 'GREEN LIGHT'}</span>
+        <span className={`light ${red ? 'red' : 'green'}`}>{red ? 'RED LIGHT' : reading ? 'LISTEN…' : 'GREEN LIGHT'}</span>
       </div>
       <div className="q-body">
         <div className="timer">
@@ -89,6 +102,14 @@ export function QuestionPanel({ question, player, seconds, left, phase, onVerdic
         </div>
         <p className="q-text">{question.q}</p>
       </div>
+      {micOn && !red && (
+        <div className={`mic ${matched ? 'hit' : mic}`}>
+          <span className="mic-dot" />
+          {matched ? `Heard it: “${heard}”`
+            : reading ? 'The mic opens after the question'
+            : MIC_SAYS[mic] ?? (heard ? `“${heard}”` : 'Listening… say your answer')}
+        </div>
+      )}
       {question.a && (
         <button className="answer" onClick={() => setReveal((v) => !v)}>
           {reveal ? question.a : 'Reveal answer (host)'} <kbd>R</kbd>

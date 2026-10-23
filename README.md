@@ -38,6 +38,23 @@ Click the logo to go back to the lobby (the game resumes where it left off).
 
 A file with no headings is read as a list of names.
 
+## Voice (Chrome)
+
+- **The doll speaks** (speechSynthesis): calls each player, reads the question,
+  announces "passed" / "eliminated" and the penalty.
+- **Players answer out loud** (Web Speech recognition, `en-IN`): the mic opens
+  when she finishes reading, the transcript shows live, and hearing the answer
+  stops the clock and passes the player. Chrome sends the mic audio to
+  Google's speech service.
+- The host's A / F keys always override, for noise or odd answers.
+- `Voice` / `Mic` toggles sit top-right in the game.
+
+Answers match loosely: case, punctuation, "the/a", "3" vs "three" and small
+misspellings are ignored; text in (brackets) is a note, not required. List
+alternatives with ` / `:
+
+    - Who wrote Frankenstein? | Mary Shelley / Shelley
+
 ## Fair draw
 
 `src/game/pcg.js` is PCG32 (PCG-XSH-RR, pcg-random.org), checked against the
