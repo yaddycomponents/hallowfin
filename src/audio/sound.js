@@ -40,6 +40,8 @@ function noise({ dur = 0.3, vol = 0.4, at = 0, lp = 1200 }) {
 }
 
 export const sfx = {
+  // one split-flap tile dropping: a short, bright clack
+  flap: () => { noise({ dur: 0.035, vol: 0.35, lp: 5200 }); tone({ f: 2400, type: 'square', dur: 0.012, vol: 0.03 }) },
   tick: () => tone({ f: 1800, type: 'square', dur: 0.025, vol: 0.06 }),
   land: () => { tone({ f: 110, f2: 55, type: 'triangle', dur: 0.9, vol: 0.5 }); tone({ f: 660, dur: 0.6, vol: 0.12 }) },
   heart: () => { tone({ f: 70, f2: 40, dur: 0.14, vol: 0.7 }); tone({ f: 60, f2: 35, dur: 0.16, vol: 0.5, at: 0.18 }) },

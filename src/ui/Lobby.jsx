@@ -4,6 +4,7 @@ import { useGSAP } from '@gsap/react'
 import { DEFAULTS, TEMPLATE, lines, parseMd } from '../game/data'
 import { newSeed } from '../game/pcg'
 import { sfx } from '../audio/sound'
+import { enterFull, toggleFull, useFullscreen } from './fullscreen'
 
 gsap.registerPlugin(useGSAP)
 
@@ -29,6 +30,7 @@ export function Lobby({ config, setConfig, onStart, canResume, onResume }) {
   const [files, setFiles] = useState(false)
   const [no, setNo] = useState(0)
   const [drag, setDrag] = useState(false)
+  const full = useFullscreen()
   const root = useRef()
   const card = useRef()
   const inner = useRef()
@@ -59,10 +61,11 @@ export function Lobby({ config, setConfig, onStart, canResume, onResume }) {
 
   const yes = contextSafe((e) => {
     e.stopPropagation()
+    enterFull() // the game is for the big screen
     sfx.unlock()
     sfx.land()
     gsap.to(card.current, { scale: 2.6, y: -30, opacity: 0, rotationX: -25, duration: 0.65, ease: 'power3.in', onComplete: () => onStart(seed) })
-    gsap.to('.biz-shadow, .lobby-hint, .lobby-files-btn', { opacity: 0, duration: 0.3 })
+    gsap.to('.biz-shadow, .lobby-hint, .lobby-corner', { opacity: 0, duration: 0.3 })
   })
 
   const refuse = contextSafe((e) => {
@@ -142,7 +145,10 @@ export function Lobby({ config, setConfig, onStart, canResume, onResume }) {
         <p className="lobby-hint">{face === 'front' ? 'Click the card' : 'Click the card to turn it back'}</p>
       </div>
 
-      <button className="ghost lobby-files-btn" onClick={() => setFiles(true)}>Player files</button>
+      <div className="lobby-corner">
+        <button className="ghost" onClick={toggleFull}>{full ? 'Exit full screen' : 'Full screen'}</button>
+        <button className="ghost" onClick={() => setFiles(true)}>Player files</button>
+      </div>
       {files && <Files config={config} setConfig={setConfig} onClose={() => setFiles(false)} readFile={readFile} />}
       {drag && <div className="drop">Drop your .md</div>}
     </div>

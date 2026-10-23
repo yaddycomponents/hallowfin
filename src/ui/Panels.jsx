@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
+import gsap from 'gsap'
+import { SplitText } from 'gsap/SplitText'
+import { useGSAP } from '@gsap/react'
 import { playerNo } from '../game/data'
 import { Reel } from './Reel'
+import { FlapReel, FlapText } from './FlapBoard'
+import { toggleFull, useFullscreen } from './fullscreen'
+
+gsap.registerPlugin(useGSAP, SplitText)
 
 const won = (n) => '₩' + n.toLocaleString('en-US')
 
 export function Hud({ run, remaining, total, prize, onLobby, config, setConfig }) {
   const toggle = (key) => setConfig((c) => ({ ...c, [key]: !c[key] }))
+  const full = useFullscreen()
   return (
     <div className="hud">
       <button className="logo small" onClick={onLobby} title="Back to the lobby">SQU<span className="tri">△</span>D <span className="pink">DARE</span></button>
@@ -13,8 +21,9 @@ export function Hud({ run, remaining, total, prize, onLobby, config, setConfig }
         <div className="toggles">
           <button className={config.voice ? 'on' : ''} onClick={() => toggle('voice')} title="The doll reads questions aloud">Voice</button>
           <button className={config.mic ? 'on' : ''} onClick={() => toggle('mic')} title="Players answer into the mic">Mic</button>
+          <button className={full ? 'on' : ''} onClick={toggleFull} title="Full screen">Full</button>
         </div>
-        <div className="stat"><span>Players left</span><b>{remaining}<i>/{total}</i></b></div>
+        <div className="stat"><span>Players left</span><b><FlapText className="mini" text={String(remaining).padStart(String(total).length, '0')} /><i>/{total}</i></b></div>
         <div className="stat piggy"><span>Prize pool</span><b>{won(prize)}</b></div>
       </div>
       <div className="seed" title="Same seed + same lists = the same draw. Anyone can replay it.">SEED {run.seed.slice(0, 8)}·{run.seed.slice(8)}</div>
@@ -28,7 +37,12 @@ export function PickPanel({ remaining, target, onLanded, phase }) {
   const reel = useRef()
   const items = remaining
   const index = Math.max(0, items.findIndex((p) => p.i === target))
-  const spin = () => phase === 'pick' && reel.current?.spin(index)
+  const spinning = useRef(false)
+  const spin = () => {
+    if (phase !== 'pick' || spinning.current) return
+    spinning.current = true
+    reel.current?.spin(index)
+  }
 
   useEffect(() => {
     const k = (e) => { if (e.code === 'Space') { e.preventDefault(); spin() } }
@@ -38,26 +52,33 @@ export function PickPanel({ remaining, target, onLanded, phase }) {
 
   return (
     <div className={`panel pick ${phase}`}>
-      <Reel
-        ref={reel}
-        items={items}
-        onDone={onLanded}
-        render={(p) => (
-          <div className="name-row">
-            <span className="no">{playerNo(p.name)}</span>
-            <span className="nm">{p.name}</span>
-          </div>
-        )}
-      />
+      <FlapReel ref={reel} items={items} onDone={onLanded} />
       {phase === 'pick' && <button className="primary big" onClick={spin}>Spin <kbd>Space</kbd></button>}
     </div>
   )
 }
 
+// The tracksuit: teal knit, a zip, and the white number patch stitched on the chest
+export function Patch({ no, mini }) {
+  return <span className={`patch ${mini ? 'mini' : ''}`}><span>{no}</span></span>
+}
+
 export function Called({ name }) {
+  const root = useRef()
+  useGSAP(() => {
+    const split = SplitText.create('.called-name', { type: 'chars' })
+    gsap.timeline()
+      .from('.suit', { y: 260, opacity: 0, duration: 0.7, ease: 'power3.out' })
+      .from('.suit .patch', { scale: 1.8, rotation: -14, opacity: 0, duration: 0.45, ease: 'back.out(2.2)' }, '-=0.15')
+      .from(split.chars, { y: 40, opacity: 0, rotationX: -80, stagger: 0.035, duration: 0.5, ease: 'back.out(1.8)' }, '-=0.1')
+    return () => split.revert()
+  }, { scope: root })
   return (
-    <div className="called">
-      <div className="called-no">PLAYER {playerNo(name)}</div>
+    <div className="called" ref={root}>
+      <div className="suit">
+        <span className="zip" />
+        <Patch no={playerNo(name)} />
+      </div>
       <div className="called-name">{name}</div>
     </div>
   )
@@ -89,7 +110,7 @@ export function QuestionPanel({ question, player, seconds, left, phase, stage, m
   return (
     <div className={`panel question ${red ? 'red' : 'green'}`}>
       <div className="q-top">
-        <span className="q-player">PLAYER {playerNo(player)} · {player}</span>
+        <span className="q-player"><Patch no={playerNo(player)} mini /> {player}</span>
         <span className={`light ${red ? 'red' : 'green'}`}>{red ? 'RED LIGHT' : reading ? 'LISTEN…' : 'GREEN LIGHT'}</span>
       </div>
       <div className="q-body">
