@@ -24,14 +24,19 @@ const RED = new Set(['redlight', 'eliminated'])
 
 function Rig({ phase }) {
   const look = useRef(new Vector3(0, 2.6, -18))
+  const shot = useRef({ phase, at: -9 })
   const p = new Vector3()
   useFrame(({ camera, clock }, dt) => {
+    // the shot: half a second of hard camera shake when someone is eliminated
+    if (shot.current.phase !== phase) shot.current = { phase, at: phase === 'eliminated' ? clock.elapsedTime : -9 }
+    const kick = Math.max(0, 1 - (clock.elapsedTime - shot.current.at) / 0.5) ** 2 * 0.18
     const s = SHOTS[phase] ?? SHOTS.pick
     camera.position.lerp(p.set(...s.pos), 1 - Math.exp(-dt * 1.6))
     // a slow handheld drift so the frame never sits dead still
     camera.position.x += Math.sin(clock.elapsedTime * 0.4) * 0.002
     look.current.lerp(p.set(...s.look), 1 - Math.exp(-dt * 2))
     camera.lookAt(look.current)
+    if (kick) camera.rotation.z += (Math.random() - 0.5) * kick, camera.position.y += (Math.random() - 0.5) * kick
   })
   return null
 }

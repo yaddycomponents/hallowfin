@@ -251,12 +251,33 @@ kbd { font-family: var(--body); font-size: 11px; padding: 2px 6px; border-radius
 .stamp.eliminated.small { top: 13%; font-size: 64px; border-width: 5px; transition: all .5s; }
 .next { position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%); }
 
-/* dare */
-.dare { left: 50%; bottom: 30px; transform: translateX(-50%); animation: rise .6s 1.2s both; }
-@keyframes rise { from { opacity: 0; transform: translate(-50%, 40px); } }
-.dare-head { font-family: var(--num); font-size: 24px; letter-spacing: .2em; color: var(--pink); background: rgba(8,10,12,.8); padding: 2px 16px; border-radius: 999px; }
-.dare .reel { width: 760px; }
-.dare-row { font-family: var(--num); font-size: 32px; letter-spacing: .03em; text-align: center; padding: 0 30px; }
+/* SP○N: the spin button */
+.spin-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 14px; height: 76px; padding: 0 34px; border: 0; border-radius: 999px; background: var(--pink); color: #fff; box-shadow: 0 10px 40px rgba(237,27,118,.5); transition: transform .15s, box-shadow .15s; }
+.spin-btn:hover:not(.running) { transform: translateY(-2px); box-shadow: 0 14px 50px rgba(237,27,118,.65); }
+.spin-btn .word { position: relative; display: inline-flex; align-items: center; font-family: var(--num); font-size: 54px; letter-spacing: .08em; line-height: 1; padding-top: 4px; }
+.glyph { width: .62em; height: .62em; margin: 0 .06em; overflow: visible; fill: none; stroke: currentColor; stroke-width: 5.5; stroke-linejoin: miter; }
+.spin-btn .word .glyph { margin-top: -6px; }
+.spin-btn kbd { position: relative; }
+/* while spinning, a line of shapes runs through the button */
+.spin-btn .trail { position: absolute; left: 0; top: 50%; display: flex; gap: 26px; font-size: 30px; color: rgba(255,255,255,.32); transform: translateY(-50%); opacity: 0; transition: opacity .3s; white-space: nowrap; }
+.spin-btn.running { cursor: default; }
+.spin-btn.running .trail { opacity: 1; animation: run .9s linear infinite; }
+.spin-btn.running .word { text-shadow: 0 0 20px rgba(255,255,255,.5); }
+@keyframes run { from { transform: translate(0, -50%); } to { transform: translate(-144.6px, -50%); } }
+
+/* the penalty card */
+.penalty { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 26px; padding-bottom: 40px; perspective: 1400px; pointer-events: none; }
+.penalty > * { pointer-events: auto; position: relative; }
+.penalty > .pen-shadow { position: absolute; bottom: 60px; }
+.pen-card { position: relative; width: min(560px, 80vw); aspect-ratio: 1.75; transform-style: preserve-3d; }
+.pen-shadow { width: min(520px, 76vw); height: 260px; border-radius: 20px; background: rgba(0,0,0,.5); filter: blur(40px); pointer-events: none !important; }
+.pen-back { justify-content: space-between; padding: 26px 34px 22px; }
+.pen-head { align-self: stretch; display: flex; align-items: center; gap: 12px; font-family: 'Special Elite', monospace; font-size: 18px; letter-spacing: .3em; text-transform: uppercase; color: #8b1d3c; }
+.deboss.tiny.inline { position: static; width: 70px; }
+.pen-dare { margin: 0; font-family: 'Special Elite', monospace; font-size: clamp(24px, 2.4vw, 34px); line-height: 1.25; text-align: center; color: #1d130b; text-wrap: balance; }
+.pen-for { align-self: flex-end; font-family: 'Special Elite', monospace; font-size: 14px; opacity: .6; }
+.shot-flash { position: fixed; inset: 0; background: #fff; pointer-events: none; animation: flash .45s ease-out forwards; }
+@keyframes flash { 0% { opacity: .95; } 100% { opacity: 0; } }
 
 /* end */
 .end { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 48px; gap: 20px; background: rgba(5,8,10,.86); backdrop-filter: blur(8px); }

@@ -6,6 +6,7 @@ import { newSeed } from '../game/pcg'
 import { sfx } from '../audio/sound'
 import { enterFull, toggleFull, useFullscreen } from './fullscreen'
 import { IconBtn } from './IconBtn'
+import { Shapes } from './Shapes'
 import { FolderOpen, Maximize, Minimize, Upload } from 'lucide-react'
 
 gsap.registerPlugin(useGSAP)
@@ -14,14 +15,6 @@ gsap.registerPlugin(useGSAP)
 // the front, a number on the back. Here the number is the game's PCG seed
 // ("same number, same game"). Flip it, and answer the only question.
 const NO_LINES = ['No', 'Are you sure?', 'Your debt says otherwise', 'There is no "no"']
-
-const Shapes = ({ className }) => (
-  <svg className={className} viewBox="0 0 330 100" aria-hidden>
-    <circle cx="50" cy="50" r="38" />
-    <path d="M165 13 L208 87 L122 87 Z" />
-    <rect x="242" y="12" width="76" height="76" />
-  </svg>
-)
 
 const asPhone = (s) => s.toUpperCase().match(/.{1,4}/g)?.join(' ') ?? ''
 

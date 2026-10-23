@@ -3,7 +3,7 @@ import gsap from 'gsap'
 import { SplitText } from 'gsap/SplitText'
 import { useGSAP } from '@gsap/react'
 import { playerNo } from '../game/data'
-import { Reel } from './Reel'
+import { Shapes } from './Shapes'
 import { FlapReel, FlapText } from './FlapBoard'
 import { toggleFull, useFullscreen } from './fullscreen'
 import { IconBtn } from './IconBtn'
@@ -45,14 +45,44 @@ export function Hud({ run, remaining, total, prize, onLobby, config, setConfig }
 
 // The name reel. The player is already drawn (PCG, see pcg.js); the spin
 // only animates to them.
+// One of the three shapes, drawn to sit in a line of text
+const SHAPES = ['t', 's', 'o']
+export function ShapeGlyph({ shape }) {
+  return (
+    <svg className="glyph" viewBox="0 0 40 40" aria-hidden>
+      {shape === 'o' && <circle cx="20" cy="20" r="15" />}
+      {shape === 't' && <path d="M20 4 L37 35 L3 35 Z" />}
+      {shape === 's' && <rect x="5" y="5" width="30" height="30" />}
+    </svg>
+  )
+}
+
+// "SP△N": the I is a triangle, like the show's logo (SQU△D). While the board
+// spins it runs through △ □ ○ once per name, so it slows down with the board.
+function SpinButton({ running, onClick }) {
+  const [k, setK] = useState(0)
+  useEffect(() => {
+    const on = () => setK((x) => x + 1)
+    addEventListener('flap-tick', on)
+    return () => removeEventListener('flap-tick', on)
+  }, [])
+  return (
+    <button className={`spin-btn ${running ? 'running' : ''}`} onClick={onClick} aria-label="Spin">
+      <span className="trail" aria-hidden>{Array.from({ length: 12 }, (_, i) => <ShapeGlyph key={i} shape={SHAPES[i % 3]} />)}</span>
+      <span className="word">SP<ShapeGlyph shape={SHAPES[k % 3]} />N</span>
+      {!running && <kbd>Space</kbd>}
+    </button>
+  )
+}
+
 export function PickPanel({ remaining, target, onLanded, phase }) {
   const reel = useRef()
   const items = remaining
   const index = Math.max(0, items.findIndex((p) => p.i === target))
-  const spinning = useRef(false)
+  const [running, setRunning] = useState(false)
   const spin = () => {
-    if (phase !== 'pick' || spinning.current) return
-    spinning.current = true
+    if (phase !== 'pick' || running) return
+    setRunning(true)
     reel.current?.spin(index)
   }
 
@@ -64,8 +94,8 @@ export function PickPanel({ remaining, target, onLanded, phase }) {
 
   return (
     <div className={`panel pick ${phase}`}>
-      <FlapReel ref={reel} items={items} onDone={onLanded} />
-      {phase === 'pick' && <button className="primary big" onClick={spin}>Spin <kbd>Space</kbd></button>}
+      <FlapReel ref={reel} items={items} onDone={onLanded} onTick={() => dispatchEvent(new Event('flap-tick'))} />
+      {phase === 'pick' && <SpinButton running={running} onClick={spin} />}
     </div>
   )
 }
@@ -189,20 +219,31 @@ export function Stamp({ kind, small }) {
   return <div className={`stamp ${kind} ${small ? 'small' : ''}`}>{kind === 'eliminated' ? 'ELIMINATED' : 'SURVIVED'}</div>
 }
 
-// The penalty reel: spins by itself after the elimination
-export function DarePanel({ dares, target, phase, onLanded, onNext }) {
-  const reel = useRef()
-  useEffect(() => {
-    if (phase !== 'eliminated') return
-    const t = setTimeout(() => reel.current?.spin(target), 1600)
-    return () => clearTimeout(t)
-  }, [phase, target])
-
+// The penalty arrives as one of the recruiter's cards: it flies in face
+// down (○△□), turns over, and the dare is typed on the back.
+export function PenaltyCard({ dare, player, onShown, onNext, shown }) {
+  const root = useRef()
+  useGSAP(() => {
+    gsap.timeline({ delay: 1.5 })
+      .from('.pen-card', { y: innerHeight, rotation: 28, rotationX: 55, scale: 1.4, duration: 0.85, ease: 'power4.out' })
+      .from('.pen-shadow', { opacity: 0, duration: 0.6 }, '<')
+      .to('.pen-card .biz-inner', { rotationY: 180, duration: 0.85, ease: 'back.inOut(1.3)' }, '+=0.35')
+      .call(() => onShown?.())
+  }, { scope: root })
   return (
-    <div className={`panel dare ${phase}`}>
-      <div className="dare-head">□ PENALTY</div>
-      <Reel ref={reel} items={dares} ms={3000} onDone={onLanded} render={(d) => <div className="dare-row">{d}</div>} />
-      {phase === 'dare' && <button className="primary big" onClick={onNext}>Next player <kbd>Space</kbd></button>}
+    <div className="penalty" ref={root}>
+      <div className="pen-shadow" />
+      <div className="pen-card">
+        <div className="biz-inner">
+          <div className="biz-face biz-front"><Shapes className="deboss" /></div>
+          <div className="biz-face biz-back pen-back">
+            <span className="pen-head"><Shapes className="deboss tiny inline" /> Penalty</span>
+            <p className="pen-dare">{dare}</p>
+            <span className="pen-for">for player {playerNo(player)}</span>
+          </div>
+        </div>
+      </div>
+      {shown && <button className="primary big" onClick={onNext}>Next player <kbd>Space</kbd></button>}
     </div>
   )
 }

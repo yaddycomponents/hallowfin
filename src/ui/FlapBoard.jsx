@@ -36,7 +36,7 @@ const ease = (x) => 1 - Math.pow(1 - x, 4)
 
 // The name reel as a flap board: same spin as before (lands exactly on the
 // drawn player, at least ~3 laps), but shows one name at a time, flipping.
-export const FlapReel = forwardRef(function FlapReel({ items, onDone, ms = 4200 }, ref) {
+export const FlapReel = forwardRef(function FlapReel({ items, onDone, onTick, ms = 4200 }, ref) {
   const [shown, setShown] = useState(null)
   const [dur, setDur] = useState(200)
   const pos = useRef(0)
@@ -65,6 +65,7 @@ export const FlapReel = forwardRef(function FlapReel({ items, onDone, ms = 4200 
           lastT = now
           setShown(items[((last % n) + n) % n])
           sfx.flap()
+          onTick?.()
         }
         pos.current = p
         if (k < 1) raf.current = requestAnimationFrame(step)
@@ -72,7 +73,7 @@ export const FlapReel = forwardRef(function FlapReel({ items, onDone, ms = 4200 
       }
       raf.current = requestAnimationFrame(step)
     },
-  }), [items, n, ms, onDone])
+  }), [items, n, ms, onDone, onTick])
 
   useEffect(() => () => cancelAnimationFrame(raf.current), [])
 

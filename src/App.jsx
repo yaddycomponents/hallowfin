@@ -6,7 +6,7 @@ import { music, sfx, stopMusic } from './audio/sound'
 import { canListen, hush, listen, sayNumber, speak } from './audio/speech'
 import { Stage } from './scene/Stage'
 import { Lobby } from './ui/Lobby'
-import { Called, DarePanel, End, Hud, PickPanel, QuestionPanel, Stamp } from './ui/Panels'
+import { Called, End, Hud, PenaltyCard, PickPanel, QuestionPanel, Stamp } from './ui/Panels'
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -161,7 +161,15 @@ export default function App() {
       {(phase === 'eliminated' || phase === 'dare') && (
         <>
           <Stamp kind="eliminated" small={phase === 'dare'} />
-          <DarePanel dares={config.dares} target={current.dareIndex} phase={phase} onLanded={() => { g.to('dare'); say(`Penalty. ${current.dare}`) }} onNext={() => { hush(); g.next() }} />
+          {phase === 'eliminated' && <div className="shot-flash" />}
+          <PenaltyCard
+            key={run.turn}
+            dare={current.dare}
+            player={current.player}
+            shown={phase === 'dare'}
+            onShown={() => { g.to('dare'); say(`Penalty. ${current.dare}`) }}
+            onNext={() => { hush(); g.next() }}
+          />
         </>
       )}
       {phase === 'end' && <End log={run.log} onLobby={g.lobby} onAgain={() => start()} />}

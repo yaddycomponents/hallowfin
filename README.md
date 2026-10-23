@@ -74,5 +74,5 @@ a game exactly.
 
     src/game    pcg.js (draws), data.js (lists, .md parsing), useGame.js (phases)
     src/scene   Stage (camera, lights), Field (arena), Doll (head turn)
-    src/ui      Lobby, Reel, Panels (HUD, question, stamps, penalty, end)
+    src/ui      Lobby (business card), FlapBoard (name board), Panels (HUD, question, O/X, penalty card, end)
     src/audio   sound.js (synth SFX + music tracks)
