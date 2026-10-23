@@ -126,10 +126,14 @@ export function Called({ name }) {
   )
 }
 
+// which browser this is, for the "can't hear" message (Zen and others build on Firefox)
+const BROWSER = /Firefox/.test(navigator.userAgent) ? 'Firefox-based browsers (Firefox, Zen)'
+  : /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent) ? 'Safari' : 'This browser'
+
 const MIC_SAYS = {
-  denied: 'Mic blocked. Allow it in Chrome, or judge with A / F',
-  unsupported: 'This browser can\'t hear answers. Use Chrome, or judge with A / F',
-  offline: 'Speech service unreachable. Judge with A / F',
+  denied: 'Mic blocked: click the mic icon in Chrome\'s address bar and allow it. Judge with A / F for now',
+  unsupported: `${BROWSER} can't hear answers. Open this page in Google Chrome, or judge with A / F`,
+  offline: 'Chrome can\'t reach its speech service (network or Brave-style blocking). Judge with A / F',
 }
 
 // The clock: a dial of 60 ticks that go dark as time runs out
