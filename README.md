@@ -68,7 +68,11 @@ for short, sayable answers (Hard mode matches word for word) and office-safe dar
 - **Hard mode** (default, toggle on the card): players can talk until the clock
   runs out, and only the **last** thing they said is judged, word for word.
   Right answer then "no wait…" = shot.
-- **Red light**: when the clock runs out a shoot bar drains for 4 s; the host can
+- **Red light, green light**: while the clock runs, the doll sings with her
+  back turned (green: answer now), then turns round (red: silence). Any new
+  word at red light eliminates on the spot. The song speed and the red light's
+  length (2–5 s) are random, so nobody can count her turn.
+- **Time's up**: when the clock runs out a shoot bar drains for 4 s; the host can
   press A to spare the player, otherwise the guard fires.
 - The host's A / F keys always override, for noise or odd answers.
 - `Voice` / `Mic` toggles sit top-right in the game.
@@ -91,6 +95,8 @@ a game exactly.
 ## Assets
 
 - `public/models/doll.glb` — "Squid Game Doll Rig" by Bug All, CC-BY (Sketchfab), compressed with gltf-transform.
+- `public/textures/ground_*.jpg` — "Baseball Playground" from Poly Haven, CC0 (1k colour and normal maps).
+- `public/models/arena.glb` — "Squid Game: Red Light Green Light" by DodoBabypop, CC BY-NC-ND 4.0 (Sketchfab), non-commercial use only. Textures shrunk to webp (`gltf-transform optimize`); its doll, tree and ground are hidden in `src/scene/Arena.jsx`. Original in `assets-src/arena/`.
 - `public/models/guard.glb` — "Squid Game Pink Soldier" by Protyanik25, CC-BY (Sketchfab). Rigged, given a rifle and a
   shooting clip by `tools/rig_guard.py` (Blender, headless), then compressed:
   ```
@@ -99,7 +105,7 @@ a game exactly.
     --texture-compress webp --compress meshopt --simplify false --join false --flatten false --prune false
   ```
   (`--prune false` keeps the empty "Muzzle" node the flash is placed on.)
-- `public/audio/lobby.mp3`, `public/audio/redlight.mp3` — optional music; add your own.
+- `public/audio/intro.mp3` (the invitation card and lobby), `lobby.mp3` (the spin, a merry-go-round tune), `redlight.mp3` (the doll's chant) — optional music; add your own.
 - `public/fonts/GameOfSquids.ttf` — optional title font (FontSpace, freeware); falls back to Bebas Neue.
 
 ## Layout

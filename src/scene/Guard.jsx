@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
+import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { AdditiveBlending, AnimationMixer, CanvasTexture, LoopOnce, Matrix4, Vector3 } from 'three'
 
 // The pink guard: "Squid Game Pink Soldier" by Protyanik25 (CC-BY), rigged
@@ -32,9 +33,12 @@ function flashTexture() {
 }
 
 // firing: false = low ready; true = raise, aim and shoot once, then hold aim.
-// aimAt: the world point the barrel should cross at the shot (the camera).
+// aimAt: the world point the barrel should cross at the shot.
+// Several guards can stand at once: each gets its own copy of the rig.
 export function Guard({ firing, aimAt, position, mask = 'circle' }) {
-  const { scene, animations } = useGLTF('/models/guard.glb')
+  const gltf = useGLTF('/models/guard.glb')
+  const scene = useMemo(() => clone(gltf.scene), [gltf.scene])
+  const { animations } = gltf
   const flash = useRef()
   const light = useRef()
   const fired = useRef(false)

@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
+import { useTexture } from '@react-three/drei'
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from 'three'
 
-// The Red Light, Green Light arena, built in code: a sand field, the red start
+// The Red Light, Green Light arena: a sand field, the red start
 // line, walls painted as a summer sky (the set is an indoor hall), and the
 // bare tree the doll stands under.
 function canvasTex(w, h, draw, repeat = [1, 1]) {
@@ -16,26 +17,6 @@ function canvasTex(w, h, draw, repeat = [1, 1]) {
   t.anisotropy = 8
   return t
 }
-
-const sand = () => canvasTex(512, 512, (g, w, h) => {
-  g.fillStyle = '#c9a66b'
-  g.fillRect(0, 0, w, h)
-  for (let i = 0; i < 26000; i++) {
-    const v = Math.random()
-    g.fillStyle = v < 0.5 ? `rgba(120,86,40,${0.05 + v * 0.12})` : `rgba(240,214,160,${0.04 + (v - 0.5) * 0.14})`
-    g.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 2.5, 1 + Math.random() * 2.5)
-  }
-  // footprints and drag marks from 456 players
-  g.strokeStyle = 'rgba(110,80,40,0.10)'
-  for (let i = 0; i < 40; i++) {
-    g.lineWidth = 2 + Math.random() * 4
-    g.beginPath()
-    const x = Math.random() * w
-    g.moveTo(x, 0)
-    g.bezierCurveTo(x + (Math.random() - 0.5) * 80, h * 0.33, x + (Math.random() - 0.5) * 80, h * 0.66, x + (Math.random() - 0.5) * 60, h)
-    g.stroke()
-  }
-}, [10, 14])
 
 const sky = () => canvasTex(2048, 512, (g, w, h) => {
   const grd = g.createLinearGradient(0, 0, 0, h)
@@ -95,14 +76,23 @@ function Tree(props) {
   )
 }
 
-export function Field() {
-  const sandTex = useMemo(sand, [])
+// inArena: the downloaded set brings its own walls, so the painted-sky walls
+// here are left out (the sand, the lines and the tree stay)
+export function Field({ inArena = false }) {
+  // packed sand: "Baseball Playground" from Poly Haven (CC0), tiled every ~9 m
+  const [sandTex, sandNor] = useTexture(['/textures/ground_diff.jpg', '/textures/ground_nor.jpg'], (ts) => ts.forEach((t, i) => {
+    t.wrapS = t.wrapT = RepeatWrapping
+    t.repeat.set(7, 9)
+    t.anisotropy = 8
+    if (i === 0) t.colorSpace = SRGBColorSpace
+  }))
   const skyTex = useMemo(sky, [])
   return (
     <group>
       <mesh rotation-x={-Math.PI / 2} position={[0, 0, -20]} receiveShadow>
         <planeGeometry args={[60, 80]} />
-        <meshStandardMaterial map={sandTex} roughness={1} />
+        {/* lifted toward the show's pale, sunlit sand */}
+        <meshStandardMaterial map={sandTex} normalMap={sandNor} normalScale={[0.8, 0.8]} color={[1.55, 1.38, 1.12]} roughness={1} />
       </mesh>
       {/* the start line, just in front of the players */}
       <mesh rotation-x={-Math.PI / 2} position={[0, 0.01, -2.2]}>
@@ -115,6 +105,7 @@ export function Field() {
         <meshStandardMaterial color="#c4161c" roughness={0.9} />
       </mesh>
       {/* painted-sky walls: back and both sides */}
+      {!inArena && <>
       <mesh position={[0, 9, -30]}>
         <planeGeometry args={[60, 18]} />
         <meshBasicMaterial map={skyTex} toneMapped={false} />
@@ -125,6 +116,7 @@ export function Field() {
           <meshBasicMaterial map={skyTex} toneMapped={false} />
         </mesh>
       ))}
+      </>}
       {/* behind her, as on the show's field */}
       <Tree position={[2.6, 0, -23.5]} scale={1.2} />
     </group>

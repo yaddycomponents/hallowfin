@@ -3,7 +3,7 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { DEFAULTS, TEMPLATE, lines, parseMd } from '../game/data'
 import { newSeed } from '../game/pcg'
-import { sfx } from '../audio/sound'
+import { music, sfx } from '../audio/sound'
 import { enterFull, toggleFull, useFullscreen } from './fullscreen'
 import { IconBtn } from './IconBtn'
 import { Shapes } from './Shapes'
@@ -52,6 +52,8 @@ export function Lobby({ config, setConfig, onStart, canResume, onResume }) {
     const toBack = face === 'front'
     sfx.unlock()
     sfx.turn()
+    // browsers hold sound until the first click: this is it, so the opening starts here
+    music('intro', 0.5)
     setFace(toBack ? 'back' : 'front')
     gsap.to(inner.current, { rotationY: toBack ? 180 : 0, duration: 0.9, ease: 'back.inOut(1.3)' })
   })

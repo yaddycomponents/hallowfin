@@ -53,7 +53,7 @@ export function useGame() {
   const to = useCallback((phase, patch) => setRun((r) => ({ ...r, ...patch, phase })), [])
 
   const start = useCallback((seed) => {
-    setRun({ phase: 'pick', seed: seed || newSeed(), turn: 0, qTurn: 0, dTurn: 0, log: [] })
+    setRun({ phase: 'pick', seed: seed || newSeed(), turn: 0, qTurn: 0, dTurn: 0, log: [], auto: false })
   }, [])
 
   const verdict = useCallback((result) => {
@@ -74,13 +74,29 @@ export function useGame() {
       qTurn: r.qTurn + 1,
       dTurn: last?.result === 'failed' ? r.dTurn + 1 : r.dTurn,
       phase: turn >= n ? 'end' : 'pick',
+      auto: true, // the next draw spins by itself
     }
   }
   const next = useCallback(() => setRun(advance), [n])
 
+  // the called player isn't in today: note it and draw again. No question or
+  // dare is used up, and they won't be drawn again this game.
+  const absent = useCallback(() => setRun((r) => {
+    if (r.log.length > r.turn) return r // a verdict is already in
+    const turn = r.turn + 1
+    return {
+      ...r,
+      turn,
+      log: [...r.log, { playerIndex: current.playerIndex, name: current.player, result: 'absent' }],
+      phase: turn >= n ? 'end' : 'pick',
+      auto: true,
+    }
+  }), [current, n])
+
   // back from the lobby: if this turn's verdict is already in (they left before
   // pressing next), move on, or the same player would be drawn again
-  const resume = useCallback(() => setRun((r) => (r.log.length > r.turn ? advance(r) : { ...r, phase: 'pick' })), [n])
+  // (no auto spin when coming back from the lobby: the host may still be setting up)
+  const resume = useCallback(() => setRun((r) => ({ ...(r.log.length > r.turn ? advance(r) : r), phase: r.log.length > r.turn && r.turn + 1 >= n ? 'end' : 'pick', auto: false })), [n])
 
-  return { config, setConfig, run, current, remaining, eliminated, won, to, start, verdict, next, resume, lobby: () => to('lobby') }
+  return { config, setConfig, run, current, remaining, eliminated, won, to, start, verdict, next, absent, resume, lobby: () => to('lobby') }
 }

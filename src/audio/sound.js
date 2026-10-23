@@ -42,6 +42,8 @@ function noise({ dur = 0.3, vol = 0.4, at = 0, lp = 1200 }) {
 export const sfx = {
   // one split-flap tile dropping: a short, bright clack
   flap: () => { noise({ dur: 0.035, vol: 0.35, lp: 5200 }); tone({ f: 2400, type: 'square', dur: 0.012, vol: 0.03 }) },
+  // the floor shuffling: a soft, low turn of cloth tiles
+  shuffle: () => { noise({ dur: 0.06, vol: 0.16, lp: 1400 }); tone({ f: 300, f2: 210, type: 'triangle', dur: 0.07, vol: 0.07 }) },
   tick: () => tone({ f: 1800, type: 'square', dur: 0.025, vol: 0.06 }),
   land: () => { tone({ f: 110, f2: 55, type: 'triangle', dur: 0.9, vol: 0.5 }); tone({ f: 660, dur: 0.6, vol: 0.12 }) },
   heart: () => { tone({ f: 70, f2: 40, dur: 0.14, vol: 0.7 }); tone({ f: 60, f2: 35, dur: 0.16, vol: 0.5, at: 0.18 }) },
@@ -94,7 +96,50 @@ export function music(name, vol = 0.6, { restart = false } = {}) {
   a.play().then(() => fade(a, vol, 800), () => {})
 }
 
+// where a playing song is, in seconds (null when it isn't playing)
+export function songTime(name) {
+  const a = tracks[name]
+  return a && !a.paused ? a.currentTime : null
+}
+
+// where a song is or will resume from, playing or not (null when the file is
+// missing); duration so a ride can follow it round the loop
+export function songAt(name) {
+  const a = tracks[name]
+  return a && !a.dataset.missing ? { time: a.currentTime, playing: !a.paused, duration: a.duration || Infinity } : null
+}
+
 export function stopMusic(name, ms = 600) {
   const a = tracks[name]
   if (a && !a.paused) fade(a, 0, ms, () => a.pause())
+}
+
+// One run of a song at a given speed, not looped: the doll's chant before she
+// turns. Pitch follows speed, like the show's sped-up and dragged-out takes.
+// until: where in the file (seconds) to stop: the last syllable, or earlier to
+// cut the chant short. Resolves the moment playback reaches it, read off the
+// audio clock itself, so her turn lands on the sound and not on 'ended' (which
+// fires late, after the file's tail of silence).
+export function sing(name, rate = 1, vol = 0.6, until = Infinity) {
+  const a = track(name)
+  let stopped = false
+  let raf
+  const done = new Promise((resolve) => {
+    const guess = () => setTimeout(resolve, (Math.min(until, 4.6) * 1000) / rate)
+    if (a.dataset.missing) return guess()
+    clearInterval(fades[a.src])
+    a.loop = false
+    a.currentTime = 0
+    a.playbackRate = rate
+    a.preservesPitch = false
+    a.volume = vol
+    a.onended = () => resolve()
+    const watch = () => {
+      if (stopped) return
+      if (a.currentTime >= until) { a.pause(); a.onended = null; return resolve() }
+      raf = requestAnimationFrame(watch)
+    }
+    a.play().then(watch, guess)
+  })
+  return { done, stop: () => { if (!stopped) { stopped = true; cancelAnimationFrame(raf); a.onended = null; a.pause() } } }
 }

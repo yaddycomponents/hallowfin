@@ -3,18 +3,20 @@ import gsap from 'gsap'
 import { SplitText } from 'gsap/SplitText'
 import { useGSAP } from '@gsap/react'
 import { playerNo } from '../game/data'
+import { music } from '../audio/sound'
 import { Shapes } from './Shapes'
 import { FlapReel, FlapText } from './FlapBoard'
 import { toggleFull, useFullscreen } from './fullscreen'
 import { IconBtn } from './IconBtn'
 import { ShapeBtn } from './ShapeBtn'
+import { MicMeter } from './MicMeter'
 import { Crosshair, Eye, EyeOff, Home, Maximize, Mic, MicOff, Minimize, PiggyBank, Volume2, VolumeX } from 'lucide-react'
 
 gsap.registerPlugin(useGSAP, SplitText)
 
 const won = (n) => '₩' + n.toLocaleString('en-US')
 
-export function Hud({ run, remaining, total, prize, onLobby, config, setConfig }) {
+export function Hud({ run, remaining, total, prize, onLobby, config, setConfig, listening = false }) {
   const toggle = (key) => setConfig((c) => ({ ...c, [key]: !c[key] }))
   const full = useFullscreen()
   const digits = String(total).length
@@ -24,7 +26,9 @@ export function Hud({ run, remaining, total, prize, onLobby, config, setConfig }
       <div className="hud-right">
         <div className="hud-icons">
           <IconBtn icon={config.voice ? Volume2 : VolumeX} label={config.voice ? 'Doll voice on' : 'Doll voice off'} on={config.voice} onClick={() => toggle('voice')} />
-          <IconBtn icon={config.mic ? Mic : MicOff} label={config.mic ? 'Mic answers on' : 'Mic answers off'} on={config.mic} onClick={() => toggle('mic')} />
+          {config.mic
+            ? <MicMeter listening={listening} onClick={() => toggle('mic')} />
+            : <IconBtn icon={MicOff} label="Mic answers off" on={false} onClick={() => toggle('mic')} />}
           <IconBtn icon={full ? Minimize : Maximize} label={full ? 'Exit full screen' : 'Full screen'} onClick={toggleFull} />
         </div>
         {/* the dorm's board: players still in, and the piggy bank */}
@@ -76,16 +80,32 @@ function SpinButton({ running, onClick }) {
   )
 }
 
-export function PickPanel({ remaining, target, onLanded, phase }) {
+// auto: spin by itself once the floor is laid out (every draw after the first)
+export function PickPanel({ remaining, target, onLanded, phase, auto = false }) {
   const reel = useRef()
   const items = remaining
   const index = Math.max(0, items.findIndex((p) => p.i === target))
   const [running, setRunning] = useState(false)
+  // a ref too, so a spin started from a timer sees the latest value
+  const busy = useRef(false)
+  // back to the floor without a remount (the called player was skipped as
+  // absent): ready to spin again
+  useEffect(() => { if (phase === 'pick') { busy.current = false; setRunning(false) } }, [phase])
   const spin = () => {
-    if (phase !== 'pick' || running) return
+    if (phase !== 'pick' || busy.current) return
+    busy.current = true
     setRunning(true)
+    // the merry-go-round song plays for the ride (it stops once a name is called)
+    music('lobby', 0.45)
     reel.current?.spin(index)
   }
+
+  // the floor takes ~1 s to ripple in; then the ride starts on its own
+  useEffect(() => {
+    if (phase !== 'pick' || !auto) return
+    const t = setTimeout(spin, 1300)
+    return () => clearTimeout(t)
+  }, [phase, auto, target])
 
   useEffect(() => {
     const k = (e) => { if (e.code === 'Space') { e.preventDefault(); spin() } }
@@ -95,7 +115,7 @@ export function PickPanel({ remaining, target, onLanded, phase }) {
 
   return (
     <div className={`panel pick ${phase}`}>
-      <FlapReel ref={reel} items={items} onDone={onLanded} onTick={() => dispatchEvent(new Event('flap-tick'))} />
+      <FlapReel ref={reel} bare items={items} onDone={onLanded} onTick={() => dispatchEvent(new Event('flap-tick'))} />
       {phase === 'pick' && <SpinButton running={running} onClick={spin} />}
     </div>
   )
@@ -106,20 +126,32 @@ export function Patch({ no, mini }) {
   return <span className={`patch ${mini ? 'mini' : ''}`}><span>{no}</span></span>
 }
 
-export function Called({ name }) {
+// the player's tile from the floor, held up close: teal cloth, the stitched
+// edge, their shape, and the number patch
+function TileShape({ shape }) {
+  return (
+    <svg className="tile-shape" viewBox="0 0 40 40">
+      {shape === 'o' ? <circle cx="20" cy="20" r="14" /> : shape === 't' ? <path d="M20 5 L35 33 L5 33 Z" /> : <rect x="7" y="7" width="26" height="26" />}
+    </svg>
+  )
+}
+
+export function Called({ name, shape }) {
   const root = useRef()
   useGSAP(() => {
     const split = SplitText.create('.called-name', { type: 'chars' })
     gsap.timeline()
-      .from('.suit', { y: 260, opacity: 0, duration: 0.7, ease: 'power3.out' })
-      .from('.suit .patch', { scale: 1.8, rotation: -14, opacity: 0, duration: 0.45, ease: 'back.out(2.2)' }, '-=0.15')
+      // it turns over like the tile on the floor did
+      .from('.tile-card', { y: 200, rotationX: 75, scale: 0.6, opacity: 0, duration: 0.75, ease: 'back.out(1.4)' })
+      .from('.tile-card .tile-shape', { scale: 0, opacity: 0, duration: 0.35, ease: 'back.out(2.4)' }, '-=0.3')
+      .from('.tile-card .patch', { scale: 1.8, rotation: -14, opacity: 0, duration: 0.45, ease: 'back.out(2.2)' }, '-=0.2')
       .from(split.chars, { y: 40, opacity: 0, rotationX: -80, stagger: 0.035, duration: 0.5, ease: 'back.out(1.8)' }, '-=0.1')
     return () => split.revert()
   }, { scope: root })
   return (
     <div className="called" ref={root}>
-      <div className="suit">
-        <span className="zip" />
+      <div className="tile-card">
+        <TileShape shape={shape} />
         <Patch no={playerNo(name)} />
       </div>
       <div className="called-name">{name}</div>
@@ -185,12 +217,13 @@ function ShootBar({ grace }) {
   )
 }
 
-export function QuestionPanel({ question, player, seconds, left, phase, stage, micOn, hard, mic, heard, grace, onVerdict }) {
+export function QuestionPanel({ question, player, seconds, left, phase, stage, micOn, hard, mic, heard, watching, grace, onVerdict }) {
   const [reveal, setReveal] = useState(false)
   const red = phase === 'redlight'
   const reading = stage === 'reading' && !red
   const matched = stage === 'matched'
   const wrong = stage === 'wrong'
+  const moved = stage === 'moved' // spoke while she was looking
 
   useEffect(() => {
     const k = (e) => {
@@ -202,14 +235,16 @@ export function QuestionPanel({ question, player, seconds, left, phase, stage, m
     return () => removeEventListener('keydown', k)
   }, [onVerdict])
 
-  const micLine = matched ? `Heard it: “${heard}”`
+  const micLine = moved ? `Caught talking at red light: “${heard}”`
+    : watching ? 'She’s watching. Not a word…'
+    : matched ? `Heard it: “${heard}”`
     : wrong ? `Wrong: “${heard}”`
-    : reading ? (hard ? 'Talk all you want: only your last answer counts' : 'The mic opens after the question')
+    : reading ? 'Answer while she sings. When she turns: not a word'
     : MIC_SAYS[mic] ?? (heard ? (hard ? `Last answer: “${heard}”` : `“${heard}”`) : hard ? 'Listening… your last answer counts' : 'Listening… say your answer')
 
   return (
     <>
-      <Light red={red} reading={reading} />
+      <Light red={red || watching || moved} reading={reading} />
       <div className={`qbar ${red ? 'red' : ''}`}>
         <Dial left={left} seconds={seconds} red={red} />
         <div className="q-main">
@@ -223,7 +258,7 @@ export function QuestionPanel({ question, player, seconds, left, phase, stage, m
             )}
           </div>
           <p className="q-text">{question.q}</p>
-          {micOn && !red && <p className={`mic ${matched ? 'hit' : wrong ? 'miss' : mic}`}><span className="mic-dot" />{micLine}</p>}
+          {micOn && !red && <p className={`mic ${matched ? 'hit' : wrong || moved ? 'miss' : watching ? 'freeze' : mic}`}><span className="mic-dot" />{micLine}</p>}
           {red && <ShootBar grace={grace} />}
         </div>
         <div className="votes">
@@ -278,7 +313,7 @@ export function End({ log, onLobby, onAgain }) {
           <li key={i} className={e.result}>
             <span className="no">{playerNo(e.name)}</span>
             <span className="nm">{e.name}</span>
-            <span className="res">{e.result === 'failed' ? `✕ ${e.dare}` : '○ survived'}</span>
+            <span className="res">{e.result === 'failed' ? `✕ ${e.dare}` : e.result === 'absent' ? '– not here' : '○ survived'}</span>
           </li>
         ))}
       </ul>
@@ -286,7 +321,7 @@ export function End({ log, onLobby, onAgain }) {
         <IconBtn icon={Home} label="Back to the lobby" onClick={onLobby} />
         <ShapeBtn shape="next" label="New game" onClick={onAgain} />
       </div>
-      <p className="credit">Doll model: "Squid Game Doll Rig" by Bug All (CC-BY), Sketchfab · Guard model: "Squid Game Pink Soldier" by Protyanik25 (CC-BY), Sketchfab</p>
+      <p className="credit">Doll model: "Squid Game Doll Rig" by Bug All (CC-BY), Sketchfab · Guard model: "Squid Game Pink Soldier" by Protyanik25 (CC-BY), Sketchfab · Arena: "Squid Game: Red Light Green Light" by DodoBabypop (CC BY-NC-ND), Sketchfab</p>
     </div>
   )
 }

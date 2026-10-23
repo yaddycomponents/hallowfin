@@ -45,10 +45,14 @@ export const DEFAULTS = {
 
 const KEY = 'halloween-dare:v1'
 
+// a list item without its bullet(s): "- Name", "- - Name", "1. Name", "• Name"
+const bare = (line) => line.replace(/^(?:[-*+•–—]\s*|\d+[.)]\s+)+/, '').replace(/^\[[ x]\]\s*/i, '').trim()
+
 export function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY))
-    if (s && Array.isArray(s.players)) return { ...DEFAULTS, ...s }
+    // older saves may hold names with a bullet still on them
+    if (s && Array.isArray(s.players)) return { ...DEFAULTS, ...s, players: s.players.map(bare).filter(Boolean) }
   } catch {}
   return DEFAULTS
 }
@@ -78,7 +82,7 @@ export function parseMd(text) {
       continue
     }
     if (!section) continue
-    const item = line.replace(/^([-*+]|\d+[.)])\s+/, '').replace(/^\[[ x]\]\s*/i, '').trim()
+    const item = bare(line)
     if (item) out[section].push(item)
   }
   return out
@@ -136,9 +140,9 @@ export function splitQuestion(q) {
   return i < 0 ? { q, a: null } : { q: q.slice(0, i), a: q.slice(i + 3) }
 }
 
-// Every name gets a stable 3-digit player number, like the tracksuits: a hash
-// of the name, moved on to the next free number if someone else has it, so
-// no two players on the roster share one (the doll calls numbers, not names)
+// Every name gets a 3-digit player number, like the tracksuits: its place in
+// the list (the doll calls numbers, not names). A name not on the roster
+// falls back to a hash of the name.
 const hashNo = (name) => {
   let h = 7
   for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0
@@ -147,14 +151,8 @@ const hashNo = (name) => {
 let roster = new Map()
 export function setRoster(players) {
   roster = new Map()
-  const taken = new Set()
-  for (const name of players) {
-    if (roster.has(name)) continue
-    let k = hashNo(name)
-    while (taken.has(k)) k = (k + 1) % 456
-    taken.add(k)
-    roster.set(name, String(k + 1).padStart(3, '0'))
-  }
+  // 001, 002, … in list order, so the floor reads in sequence
+  for (const name of players) if (!roster.has(name)) roster.set(name, String(roster.size + 1).padStart(3, '0'))
 }
 export const playerNo = (name) => roster.get(name) ?? String(hashNo(name) + 1).padStart(3, '0')
 

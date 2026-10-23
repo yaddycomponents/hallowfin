@@ -17,9 +17,18 @@ const bone = (root, re) => {
   return hit
 }
 
+// A bone's rest rotation, read from the file itself rather than the live bone:
+// a hot reload while she's turned would otherwise take "turned" as her rest,
+// and she'd face the players on green light.
+const restOf = (parser, b) => {
+  const i = b && parser.associations.get(b)?.nodes
+  const r = i != null && parser.json.nodes[i].rotation
+  return r ? new Quaternion().fromArray(r) : b?.quaternion.clone()
+}
+
 // facing: 0 = back to the players (green light), 1 = looking at them (red light)
 export function Doll({ facing = 0, ...props }) {
-  const { scene } = useGLTF('/models/doll.glb')
+  const { scene, parser } = useGLTF('/models/doll.glb')
   const turn = useRef(0)
 
   // the export is unlit (flat colour); give it a lit material so the sun shapes her
@@ -33,20 +42,25 @@ export function Doll({ facing = 0, ...props }) {
     })
     const neck = bone(scene, /spine\.?004/)
     const head = bone(scene, /spine\.?005/)
-    const box = new Box3().setFromObject(scene, true)
-    const size = box.getSize(new Vector3())
-    const s = HEIGHT / size.y
-    return {
-      neck, head,
-      base: { neck: neck?.quaternion.clone(), head: head?.quaternion.clone() },
-      fit: { scale: s, y: -box.min.y * s },
+    // measured once, in the model's own space: the loaded scene is shared, and
+    // on a remount (or a hot reload) it is still inside the scaled group, which
+    // would make it measure as already fitted and come out twice the size.
+    if (!scene.userData.fit) {
+      const parent = scene.parent
+      parent?.remove(scene)
+      scene.updateMatrixWorld(true)
+      const box = new Box3().setFromObject(scene, true)
+      const s = HEIGHT / box.getSize(new Vector3()).y
+      scene.userData.fit = { scale: s, y: -box.min.y * s }
+      parent?.add(scene)
     }
-  }, [scene])
+    return { neck, head, base: { neck: restOf(parser, neck), head: restOf(parser, head) }, fit: scene.userData.fit }
+  }, [scene, parser])
 
   const q = useMemo(() => new Quaternion(), [])
   useFrame((_, dt) => {
     // a quick, mechanical turn with a slight overshoot settle
-    turn.current = MathUtils.damp(turn.current, facing, facing > turn.current ? 7 : 4, dt)
+    turn.current = MathUtils.damp(turn.current, facing, facing > turn.current ? 13 : 8, dt)
     const a = turn.current * Math.PI
     if (neck) neck.quaternion.copy(base.neck).multiply(q.setFromAxisAngle(Y_AXIS, a * NECK_SHARE))
     if (head) head.quaternion.copy(base.head).multiply(q.setFromAxisAngle(Y_AXIS, a * (1 - NECK_SHARE)))
