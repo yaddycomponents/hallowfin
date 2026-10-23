@@ -5,6 +5,8 @@ import { DEFAULTS, TEMPLATE, lines, parseMd } from '../game/data'
 import { newSeed } from '../game/pcg'
 import { sfx } from '../audio/sound'
 import { enterFull, toggleFull, useFullscreen } from './fullscreen'
+import { IconBtn } from './IconBtn'
+import { FolderOpen, Maximize, Minimize, Upload } from 'lucide-react'
 
 gsap.registerPlugin(useGSAP)
 
@@ -31,6 +33,7 @@ export function Lobby({ config, setConfig, onStart, canResume, onResume }) {
   const [no, setNo] = useState(0)
   const [drag, setDrag] = useState(false)
   const full = useFullscreen()
+  const upload = useRef()
   const root = useRef()
   const card = useRef()
   const inner = useRef()
@@ -146,8 +149,10 @@ export function Lobby({ config, setConfig, onStart, canResume, onResume }) {
       </div>
 
       <div className="lobby-corner">
-        <button className="ghost" onClick={toggleFull}>{full ? 'Exit full screen' : 'Full screen'}</button>
-        <button className="ghost" onClick={() => setFiles(true)}>Player files</button>
+        <IconBtn icon={Upload} label="Upload a .md list" onClick={() => upload.current.click()} />
+        <IconBtn icon={FolderOpen} label="Player files" onClick={() => setFiles(true)} />
+        <IconBtn icon={full ? Minimize : Maximize} label={full ? 'Exit full screen' : 'Full screen'} onClick={toggleFull} />
+        <input ref={upload} type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden onChange={(e) => { readFile(e.target.files[0]); e.target.value = '' }} />
       </div>
       {files && <Files config={config} setConfig={setConfig} onClose={() => setFiles(false)} readFile={readFile} />}
       {drag && <div className="drop">Drop your .md</div>}

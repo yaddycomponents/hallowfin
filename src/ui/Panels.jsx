@@ -6,6 +6,8 @@ import { playerNo } from '../game/data'
 import { Reel } from './Reel'
 import { FlapReel, FlapText } from './FlapBoard'
 import { toggleFull, useFullscreen } from './fullscreen'
+import { IconBtn } from './IconBtn'
+import { Eye, EyeOff, Maximize, Mic, MicOff, Minimize, PiggyBank, Volume2, VolumeX } from 'lucide-react'
 
 gsap.registerPlugin(useGSAP, SplitText)
 
@@ -14,17 +16,27 @@ const won = (n) => '₩' + n.toLocaleString('en-US')
 export function Hud({ run, remaining, total, prize, onLobby, config, setConfig }) {
   const toggle = (key) => setConfig((c) => ({ ...c, [key]: !c[key] }))
   const full = useFullscreen()
+  const digits = String(total).length
   return (
     <div className="hud">
       <button className="logo small" onClick={onLobby} title="Back to the lobby">SQU<span className="tri">△</span>D <span className="pink">DARE</span></button>
       <div className="hud-right">
-        <div className="toggles">
-          <button className={config.voice ? 'on' : ''} onClick={() => toggle('voice')} title="The doll reads questions aloud">Voice</button>
-          <button className={config.mic ? 'on' : ''} onClick={() => toggle('mic')} title="Players answer into the mic">Mic</button>
-          <button className={full ? 'on' : ''} onClick={toggleFull} title="Full screen">Full</button>
+        <div className="hud-icons">
+          <IconBtn icon={config.voice ? Volume2 : VolumeX} label={config.voice ? 'Doll voice on' : 'Doll voice off'} on={config.voice} onClick={() => toggle('voice')} />
+          <IconBtn icon={config.mic ? Mic : MicOff} label={config.mic ? 'Mic answers on' : 'Mic answers off'} on={config.mic} onClick={() => toggle('mic')} />
+          <IconBtn icon={full ? Minimize : Maximize} label={full ? 'Exit full screen' : 'Full screen'} onClick={toggleFull} />
         </div>
-        <div className="stat"><span>Players left</span><b><FlapText className="mini" text={String(remaining).padStart(String(total).length, '0')} /><i>/{total}</i></b></div>
-        <div className="stat piggy"><span>Prize pool</span><b>{won(prize)}</b></div>
+        {/* the dorm's board: players still in, and the piggy bank */}
+        <div className="scoreboard">
+          <div className="sb-cell">
+            <span className="sb-label">Players</span>
+            <span className="sb-value"><FlapText className="mini" text={String(remaining).padStart(digits, '0')} /><i>/ {String(total).padStart(digits, '0')}</i></span>
+          </div>
+          <div className="sb-cell prize">
+            <span className="sb-label"><PiggyBank size={13} strokeWidth={2.4} /> Prize</span>
+            <span className="sb-value">{won(prize)}</span>
+          </div>
+        </div>
       </div>
       <div className="seed" title="Same seed + same lists = the same draw. Anyone can replay it.">SEED {run.seed.slice(0, 8)}·{run.seed.slice(8)}</div>
     </div>
@@ -85,9 +97,45 @@ export function Called({ name }) {
 }
 
 const MIC_SAYS = {
-  denied: 'Mic blocked: allow it in Chrome, or judge with A / F',
-  unsupported: 'No speech recognition here: use Chrome, or judge with A / F',
-  offline: 'Speech service unreachable: judge with A / F',
+  denied: 'Mic blocked. Allow it in Chrome, or judge with A / F',
+  unsupported: 'This browser can\'t hear answers. Use Chrome, or judge with A / F',
+  offline: 'Speech service unreachable. Judge with A / F',
+}
+
+// The clock: a dial of 60 ticks that go dark as time runs out
+function Dial({ left, seconds, red }) {
+  const lit = Math.ceil((left / seconds) * 60)
+  return (
+    <div className={`dial ${red ? 'red' : ''} ${left <= 5 && left > 0 ? 'pulse' : ''}`}>
+      <svg viewBox="0 0 120 120">
+        {Array.from({ length: 60 }, (_, i) => (
+          <line key={i} x1="60" y1="6" x2="60" y2={i % 5 ? 14 : 18} transform={`rotate(${i * 6} 60 60)`} className={i < lit ? 'lit' : ''} />
+        ))}
+      </svg>
+      <span>{Math.ceil(left)}</span>
+    </div>
+  )
+}
+
+// The players' vote from the show: O to stay, X to leave
+function Vote({ kind, label, keyName, onClick }) {
+  return (
+    <button className={`vote ${kind}`} onClick={onClick} aria-label={label}>
+      <svg viewBox="0 0 100 100">
+        {kind === 'o' ? <circle cx="50" cy="50" r="30" /> : <path d="M26 26 L74 74 M74 26 L26 74" />}
+      </svg>
+      <span>{label} <kbd>{keyName}</kbd></span>
+    </button>
+  )
+}
+
+export function Light({ red, reading }) {
+  return (
+    <div className={`light-banner ${red ? 'red' : reading ? 'wait' : 'green'}`}>
+      <b>{red ? 'Red light' : reading ? 'Listen' : 'Green light'}</b>
+      <span>{red ? '빨간불' : reading ? '들어라' : '초록불'}</span>
+    </div>
+  )
 }
 
 export function QuestionPanel({ question, player, seconds, left, phase, stage, micOn, mic, heard, onVerdict }) {
@@ -106,41 +154,34 @@ export function QuestionPanel({ question, player, seconds, left, phase, stage, m
     return () => removeEventListener('keydown', k)
   }, [onVerdict])
 
-  const frac = Math.max(0, left / seconds)
+  const micLine = matched ? `Heard it: “${heard}”`
+    : reading ? 'The mic opens after the question'
+    : MIC_SAYS[mic] ?? (heard ? `“${heard}”` : 'Listening… say your answer')
+
   return (
-    <div className={`panel question ${red ? 'red' : 'green'}`}>
-      <div className="q-top">
-        <span className="q-player"><Patch no={playerNo(player)} mini /> {player}</span>
-        <span className={`light ${red ? 'red' : 'green'}`}>{red ? 'RED LIGHT' : reading ? 'LISTEN…' : 'GREEN LIGHT'}</span>
-      </div>
-      <div className="q-body">
-        <div className="timer">
-          <svg viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="44" className="track" />
-            <circle cx="50" cy="50" r="44" className="ring" style={{ strokeDashoffset: 276.5 * (1 - frac) }} />
-          </svg>
-          <span>{Math.ceil(left)}</span>
+    <>
+      <Light red={red} reading={reading} />
+      <div className={`qbar ${red ? 'red' : ''}`}>
+        <Dial left={left} seconds={seconds} red={red} />
+        <div className="q-main">
+          <div className="q-who">
+            <Patch no={playerNo(player)} mini />
+            <span>{player}</span>
+            {question.a && (
+              <button className={`peek ${reveal ? 'open' : ''}`} onClick={() => setReveal((v) => !v)} data-tip="Host: show the answer (R)" aria-label="Show the answer">
+                {reveal ? <><EyeOff size={15} /> {question.a}</> : <Eye size={15} />}
+              </button>
+            )}
+          </div>
+          <p className="q-text">{question.q}</p>
+          {micOn && !red && <p className={`mic ${matched ? 'hit' : mic}`}><span className="mic-dot" />{micLine}</p>}
         </div>
-        <p className="q-text">{question.q}</p>
-      </div>
-      {micOn && !red && (
-        <div className={`mic ${matched ? 'hit' : mic}`}>
-          <span className="mic-dot" />
-          {matched ? `Heard it: “${heard}”`
-            : reading ? 'The mic opens after the question'
-            : MIC_SAYS[mic] ?? (heard ? `“${heard}”` : 'Listening… say your answer')}
+        <div className="votes">
+          <Vote kind="o" label="Pass" keyName="A" onClick={() => onVerdict('answered')} />
+          <Vote kind="x" label="Fail" keyName="F" onClick={() => onVerdict('failed')} />
         </div>
-      )}
-      {question.a && (
-        <button className="answer" onClick={() => setReveal((v) => !v)}>
-          {reveal ? question.a : 'Reveal answer (host)'} <kbd>R</kbd>
-        </button>
-      )}
-      <div className="verdict-btns">
-        <button className="ok" onClick={() => onVerdict('answered')}>○ Answered <kbd>A</kbd></button>
-        <button className="bad" onClick={() => onVerdict('failed')}>✕ Failed <kbd>F</kbd></button>
       </div>
-    </div>
+    </>
   )
 }
 
