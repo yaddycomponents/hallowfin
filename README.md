@@ -11,7 +11,8 @@ Internal use only.
     npm install
     npm run dev
 
-Static site, no backend: lists live in the browser's localStorage, and a
+Static site, no backend: lists and the game in progress live in the tab's
+sessionStorage (closing the tab starts fresh), and a
 `.md` upload is read locally with FileReader.
 
 ## Controls
@@ -105,7 +106,7 @@ a game exactly.
     --texture-compress webp --compress meshopt --simplify false --join false --flatten false --prune false
   ```
   (`--prune false` keeps the empty "Muzzle" node the flash is placed on.)
-- `public/audio/intro.mp3` (the invitation card and lobby), `lobby.mp3` (the spin, a merry-go-round tune), `redlight.mp3` (the doll's chant), `dare.mp3` (under a dare, e.g. "Pink Soldiers") — optional music; add your own.
+- `public/audio/intro.mp3` (the invitation card and lobby), `lobby.mp3` (the spin, a merry-go-round tune), `redlight.mp3` (the doll's chant), `dare.mp3` (under a dare, e.g. "Pink Soldiers"), `dalgona.mp3` (while a player carves), `called.mp3` (under a player's call, e.g. "Round VI") — optional music; add your own.
 - `public/fonts/GameOfSquids.ttf` — optional title font (FontSpace, freeware); falls back to Bebas Neue.
 
 ## Layout

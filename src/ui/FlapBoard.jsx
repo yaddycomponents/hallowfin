@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { seekSong, sfx, songAt } from '../audio/sound'
+import { sfx } from '../audio/sound'
 import { playerNo } from '../game/data'
 
 // A split-flap board, like the dorm's player counter. Each tile keeps the
@@ -36,25 +36,12 @@ export function FlapText({ text, width = text.length, dur = 180, className = '' 
 // second-to-last name up for ~1.8 s, which looked like the landing. Quadratic
 // still slows into the stop, but the last few names keep moving.
 const ease = (x) => 1 - Math.pow(1 - x, 2)
-// The lobby song (Mingle, "round and round"), fitted to the whole file:
-// 104.96 BPM, first beat 0.43 s in (stays within ~30 ms of the beat to the end;
-// the 104.75 read off the opening drifted ~130 ms late by the last bars).
-export const BEAT = 60 / 104.96
-export const FIRST_BEAT = 0.43
-const beatAt = (b) => FIRST_BEAT + b * BEAT
-// "손뼉을" (clap your hands!): sung twice in the song, at 18.2 s and 54.2 s
-// (the singing comes in at 9 s, after the sax). Every draw lands on one, like
-// the game's number call: the first draw on the first, the rest on the second.
-export const CLAPS = [31, 94]
-// The floor's shuffle rides into it like a merry-go-round: it gets going on
-// the beat, spins on the half-beats, then slows (on the beat, every other
-// beat) into the stop; the last tick is the clap. Long enough to make people
-// nervous.
-const RIDE = [...Array(4).fill(1), ...Array(16).fill(0.5), ...Array(4).fill(1), ...Array(3).fill(2)] // 22 beats, ~12.6 s
-const SPAN = RIDE.reduce((a, b) => a + b)
-// later draws jump the song to this many beats before the ride, so it's
-// playing (and faded up) before the floor moves
-const LEAD_IN = 2
+// once the music stops: the floor's last turns, slowing with the song as it
+// winds down (ms after the stop)
+const SETTLE = [220, 520, 920, 1450, 2100]
+// the ride's turns: slow to get going, then quick (ms between)
+const SLOW = 560
+const FAST = 280
 
 // The name reel as a flap board: same spin as before (lands exactly on the
 // drawn player, at least ~3 laps), but shows one name at a time, flipping.
@@ -68,6 +55,7 @@ export const FlapReel = forwardRef(function FlapReel({ items, onDone, onTick, ms
   const pos = useRef(0)
   const raf = useRef()
   const wait = useRef()
+  const stopping = useRef(null)
   const n = items.length
   // cells: wide enough for the longest name, within reason
   const width = Math.min(20, Math.max(10, ...items.map((p) => p.name.length)))
@@ -89,49 +77,35 @@ export const FlapReel = forwardRef(function FlapReel({ items, onDone, onTick, ms
           }, 700)
           return
         }
-        // which clap: a song still at its opening (the game's first draw) plays
-        // on through the intro into the first clap; every later draw jumps to
-        // just before the second, mid-song, so it never sounds like a restart
-        let song = songAt('lobby')
-        const fresh = !song || song.time <= beatAt(CLAPS[0] - SPAN - LEAD_IN)
-        const clap = fresh ? CLAPS[0] : CLAPS[1]
-        if (song && !fresh) {
-          seekSong('lobby', beatAt(clap - SPAN - LEAD_IN))
-          song = songAt('lobby')
-        }
-        // tick times in song seconds, read off the song itself (play() is async,
-        // so right now it may not have started); no song: off the wall clock
-        const from = song ? song.time : beatAt(clap - SPAN - LEAD_IN)
+        // musical chairs: the floor shuffles for as long as the song plays
+        // (a few slow turns to get going, then quick ones); the host stops the
+        // music (stop(), from the phone, M or Space) and it slows onto the
+        // drawn player
         const t0 = performance.now()
-        const clock = () => {
-          const at = songAt('lobby')
-          if (at?.playing) return at.time
-          // no song, or it never started (blocked): don't hang the draw
-          const waited = (performance.now() - t0) / 1000
-          return song && waited < 1.5 ? null : from + waited
+        let ticks = 0
+        let due = 0 // ms after the start the next turn is due
+        const land = () => {
+          sfx.land()
+          dispatchEvent(new CustomEvent('reel-land', { detail: items[target].i }))
+          onDone?.(items[target])
         }
-        // before the ride (the opening, on a first draw) the carousel winds up
-        // a tick a beat, so the floor moves the moment it's pressed
-        const lead = []
-        for (let b = Math.ceil((from - FIRST_BEAT) / BEAT); b < clap - SPAN; b++) lead.push(beatAt(b))
-        let at = clap - SPAN
-        const ride = [beatAt(at), ...RIDE.map((b) => beatAt((at += b)))]
-        const ticks = [...lead, ...ride]
-        let next = 0
+        const tick = () => {
+          dispatchEvent(new CustomEvent('reel-at', { detail: ticks++ }))
+          sfx.shuffle()
+          onTick?.()
+        }
+        stopping.current = null
         const step = () => {
-          const now = clock()
-          while (now != null && next < ticks.length && now >= ticks[next]) {
-            dispatchEvent(new CustomEvent('reel-at', { detail: next }))
-            next++
-            sfx.shuffle()
-            onTick?.()
+          // stopped: a few slowing turns, then the landing
+          if (stopping.current) {
+            const since = performance.now() - stopping.current.at
+            while (stopping.current.done < SETTLE.length && since >= SETTLE[stopping.current.done]) { stopping.current.done++; tick() }
+            if (stopping.current.done < SETTLE.length) raf.current = requestAnimationFrame(step)
+            else land()
+            return
           }
-          if (next < ticks.length) raf.current = requestAnimationFrame(step)
-          else {
-            sfx.land()
-            dispatchEvent(new CustomEvent('reel-land', { detail: items[target].i }))
-            onDone?.(items[target])
-          }
+          while (performance.now() - t0 >= due) { tick(); due += ticks < 4 ? SLOW : FAST }
+          raf.current = requestAnimationFrame(step)
         }
         raf.current = requestAnimationFrame(step)
         return
@@ -168,6 +142,10 @@ export const FlapReel = forwardRef(function FlapReel({ items, onDone, onTick, ms
         }
       }
       raf.current = requestAnimationFrame(step)
+    },
+    // the music stops: the ride winds down and lands
+    stop() {
+      if (!stopping.current) stopping.current = { at: performance.now(), done: 0 }
     },
   }), [items, n, ms, onDone, onTick, bare])
 

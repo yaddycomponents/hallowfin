@@ -3,7 +3,7 @@ import gsap from 'gsap'
 import { SplitText } from 'gsap/SplitText'
 import { useGSAP } from '@gsap/react'
 import { playerNo } from '../game/data'
-import { music } from '../audio/sound'
+import { music, windDown } from '../audio/sound'
 import { Shapes } from './Shapes'
 import { Lyrics } from './Lyrics'
 import { FlapReel, FlapText } from './FlapBoard'
@@ -11,13 +11,14 @@ import { toggleFull, useFullscreen } from './fullscreen'
 import { IconBtn } from './IconBtn'
 import { ShapeBtn } from './ShapeBtn'
 import { MicMeter } from './MicMeter'
+import { RemoteBtn } from './RemoteBtn'
 import { Crosshair, Eye, EyeOff, Home, Maximize, Mic, MicOff, Minimize, PiggyBank, Volume2, VolumeX } from 'lucide-react'
 
 gsap.registerPlugin(useGSAP, SplitText)
 
 const won = (n) => '₩' + n.toLocaleString('en-US')
 
-export function Hud({ run, remaining, total, prize, onLobby, config, setConfig, listening = false }) {
+export function Hud({ run, remaining, total, prize, onLobby, remote, config, setConfig, listening = false }) {
   // a demo ends here (back to the real game); a game is kept, to resume
   const home = run.demo ? 'End the demo' : 'Back to the lobby'
   const toggle = (key) => setConfig((c) => ({ ...c, [key]: !c[key] }))
@@ -29,6 +30,7 @@ export function Hud({ run, remaining, total, prize, onLobby, config, setConfig, 
       <div className="hud-right">
         <div className="hud-icons">
           <IconBtn icon={Home} label={home} onClick={onLobby} />
+          <RemoteBtn remote={remote} />
           <IconBtn icon={config.voice ? Volume2 : VolumeX} label={config.voice ? 'Doll voice on' : 'Doll voice off'} on={config.voice} onClick={() => toggle('voice')} />
           {config.mic
             ? <MicMeter listening={listening} onClick={() => toggle('mic')} />
@@ -68,7 +70,7 @@ export function ShapeGlyph({ shape }) {
 
 // "SP△N": the I is a triangle, like the show's logo (SQU△D). While the board
 // spins it runs through △ □ ○ once per name, so it slows down with the board.
-function SpinButton({ running, onClick }) {
+function SpinButton({ running, stopped, onClick }) {
   const [k, setK] = useState(0)
   useEffect(() => {
     const on = () => setK((x) => x + 1)
@@ -76,33 +78,48 @@ function SpinButton({ running, onClick }) {
     return () => removeEventListener('flap-tick', on)
   }, [])
   return (
-    <button className={`spin-btn ${running ? 'running' : ''}`} onClick={onClick} aria-label="Spin">
+    <button className={`spin-btn ${running ? 'running' : ''}`} onClick={onClick} disabled={stopped} aria-label={running ? 'Stop the music' : 'Spin'}>
       <span className="trail" aria-hidden>{Array.from({ length: 12 }, (_, i) => <ShapeGlyph key={i} shape={SHAPES[i % 3]} />)}</span>
-      <span className="word">SP<ShapeGlyph shape={SHAPES[k % 3]} />N</span>
-      {!running && <kbd>Space</kbd>}
+      {running
+        ? <span className="word">ST<ShapeGlyph shape={SHAPES[k % 3]} />P</span>
+        : <span className="word">SP<ShapeGlyph shape={SHAPES[k % 3]} />N</span>}
+      {!stopped && <kbd>Space</kbd>}
     </button>
   )
 }
 
 // auto: spin by itself once the floor is laid out (every draw after the first)
-export function PickPanel({ remaining, target, onLanded, phase, auto = false }) {
+export function PickPanel({ remaining, target, onLanded, onRunning, phase, auto = false }) {
   const reel = useRef()
   const items = remaining
   const index = Math.max(0, items.findIndex((p) => p.i === target))
   const [running, setRunning] = useState(false)
-  // a ref too, so a spin started from a timer sees the latest value
+  const [stopped, setStopped] = useState(false)
+  // refs too, so a spin started from a timer sees the latest values
   const busy = useRef(false)
+  const startedAt = useRef(0)
   // back to the floor without a remount (the called player was skipped as
   // absent): ready to spin again
-  useEffect(() => { if (phase === 'pick') { busy.current = false; setRunning(false) } }, [phase])
+  useEffect(() => { if (phase === 'pick') { busy.current = false; setRunning(false); setStopped(false) } }, [phase])
+  useEffect(() => { onRunning?.(running && !stopped) }, [running, stopped])
   const spin = () => {
     if (phase !== 'pick' || busy.current) return
     busy.current = true
+    startedAt.current = performance.now()
     setRunning(true)
-    // the merry-go-round song plays for the ride (it stops once a name is
-    // called); the last player left has no ride, so no song
+    // the merry-go-round song plays for the ride, until the host stops it;
+    // the last player left has no ride, so no song
     if (items.length > 1) music('lobby', 0.45)
     reel.current?.spin(index)
+  }
+  // the host stops the music: the floor winds down onto the drawn player
+  // (not in the first moments: a double press of Space isn't a stop)
+  const stop = () => {
+    if (phase !== 'pick' || !busy.current || stopped || items.length < 2) return
+    if (performance.now() - startedAt.current < 1500) return
+    setStopped(true)
+    windDown('lobby')
+    reel.current?.stop()
   }
 
   // the floor takes ~1 s to ripple in; then the ride starts on its own
@@ -113,7 +130,11 @@ export function PickPanel({ remaining, target, onLanded, phase, auto = false }) 
   }, [phase, auto, target])
 
   useEffect(() => {
-    const k = (e) => { if (e.code === 'Space') { e.preventDefault(); spin() } }
+    const k = (e) => {
+      if (e.repeat || e.target.closest?.('input, textarea')) return
+      if (e.code === 'Space') { e.preventDefault(); busy.current ? stop() : spin() }
+      if (e.key === 'm') stop()
+    }
     addEventListener('keydown', k)
     return () => removeEventListener('keydown', k)
   })
@@ -121,8 +142,8 @@ export function PickPanel({ remaining, target, onLanded, phase, auto = false }) 
   return (
     <div className={`panel pick ${phase}`}>
       <FlapReel ref={reel} bare items={items} onDone={onLanded} onTick={() => dispatchEvent(new Event('flap-tick'))} />
-      {phase === 'pick' && <SpinButton running={running} onClick={spin} />}
-      {phase === 'pick' && running && items.length > 1 && <Lyrics />}
+      {phase === 'pick' && running && !stopped && items.length > 1 && <Lyrics />}
+      {phase === 'pick' && <SpinButton running={running} stopped={stopped} onClick={busy.current ? stop : spin} />}
     </div>
   )
 }

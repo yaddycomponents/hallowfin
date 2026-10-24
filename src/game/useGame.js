@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEMO, load, playing, save, setRoster, splitQuestion } from './data'
 import { STREAM, drawIndex, newSeed } from './pcg'
+import { SHAPES, dalgonaAt } from './dalgona'
+
+// trying a candy out: ?shape=octopus makes every dalgona that shape
+const TRY = typeof location === 'undefined' ? null : SHAPES.find((s) => s === new URLSearchParams(location.search).get('shape')) ?? null
 
 // The round, as phases:
 //   lobby → pick (reel spins) → picked (name shown) → question (green light,
@@ -14,7 +18,7 @@ const PRIZE = 100_000_000
 const fresh = () => ({ phase: 'lobby', seed: newSeed(), turn: 0, qTurn: 0, dTurn: 0, log: [] })
 
 function loadRun() {
-  try { return JSON.parse(localStorage.getItem(RUN_KEY)) } catch { return null }
+  try { return JSON.parse(sessionStorage.getItem(RUN_KEY)) } catch { return null }
 }
 
 export function useGame() {
@@ -26,7 +30,7 @@ export function useGame() {
 
   useEffect(() => save(setup), [setup])
   // a demo is never saved: a reload mid-demo is back in the real game
-  useEffect(() => { if (!run.demo) try { localStorage.setItem(RUN_KEY, JSON.stringify(run)) } catch {} }, [run])
+  useEffect(() => { if (!run.demo) try { sessionStorage.setItem(RUN_KEY, JSON.stringify(run)) } catch {} }, [run])
 
   const config = useMemo(
     () => (run.demo ? { ...setup, ...DEMO, hard: false } : { ...setup, players: setup.players.filter(playing) }),
@@ -44,11 +48,14 @@ export function useGame() {
     return {
       playerIndex: p,
       player: players[p],
+      // the candy, if the host makes this turn a dalgona (the demo's is the
+      // easy triangle, to show how it works)
+      shape: TRY ?? (run.demo ? 'triangle' : dalgonaAt(run.seed, run.turn)),
       question: q < 0 ? null : splitQuestion(questions[q]),
       dareIndex: d,
       dare: dares[d],
     }
-  }, [run.seed, run.turn, run.qTurn, run.dTurn, players, questions, dares, n])
+  }, [run.seed, run.turn, run.qTurn, run.dTurn, run.demo, players, questions, dares, n])
 
   // players not called yet, in the lobby's order (the reel shows these, so it
   // never reveals the shuffled order)
@@ -70,7 +77,7 @@ export function useGame() {
     setRun((r) => ({
       ...r,
       phase: result === 'failed' ? 'eliminated' : 'survived',
-      log: [...r.log, { playerIndex: current.playerIndex, name: current.player, question: current.question?.q, result, dare: result === 'failed' ? current.dare : null }],
+      log: [...r.log, { playerIndex: current.playerIndex, name: current.player, question: r.phase === 'dalgona' ? `Dalgona: ${current.shape}` : current.question?.q, dalgona: r.phase === 'dalgona', result, dare: result === 'failed' ? current.dare : null }],
     }))
   }, [current])
 
@@ -81,7 +88,7 @@ export function useGame() {
     return {
       ...r,
       turn,
-      qTurn: r.qTurn + 1,
+      qTurn: last?.dalgona ? r.qTurn : r.qTurn + 1, // a dalgona turn used no question
       dTurn: last?.result === 'failed' ? r.dTurn + 1 : r.dTurn,
       phase: turn >= n ? 'end' : 'pick',
       auto: true, // the next draw spins by itself

@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#0b0d0f" />
+<title>Dalgona</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@500;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root { --pink: #ed1b76; --teal: #037a76; --green: #2fd18a; --ink: #0b0d0f; --dim: rgba(255,255,255,.6); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--ink); color: #fff; font-family: Inter, system-ui, sans-serif; overscroll-behavior: none; }
+  body { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); user-select: none; -webkit-user-select: none; }
+  header { width: 100%; display: flex; align-items: center; justify-content: space-between; }
+  .title { font: 400 30px/1 'Bebas Neue', sans-serif; letter-spacing: .08em; }
+  .title i { font-style: normal; color: var(--pink); }
+  .no { font: 400 30px/1 'Bebas Neue', sans-serif; color: var(--pink); }
+  .bar { width: 100%; display: flex; align-items: center; gap: 12px; }
+  .lives { display: flex; gap: 6px; }
+  .lives b { width: 18px; height: 18px; border-radius: 50%; background: #d99a3e; box-shadow: inset 0 -3px 0 #a86d22; }
+  .lives b.gone { background: #3a2a1a; box-shadow: none; opacity: .5; }
+  .progress { flex: 1; height: 10px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--green); transition: width .15s; }
+  .time { font: 400 34px/1 'Bebas Neue', sans-serif; min-width: 2ch; text-align: right; }
+  .time.low { color: var(--pink); }
+  canvas { width: min(100%, 62vh); aspect-ratio: 1; touch-action: none; border-radius: 50%; }
+  .hint { color: var(--dim); font-size: 14px; text-align: center; max-width: 34ch; line-height: 1.45; }
+  .cover { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; background: rgba(11,13,15,.92); text-align: center; }
+  .cover[hidden] { display: none; }
+  .cover h1 { margin: 0; font: 400 54px/1 'Bebas Neue', sans-serif; letter-spacing: .06em; }
+  .cover p { margin: 0; color: var(--dim); font-size: 16px; line-height: 1.5; max-width: 32ch; }
+  .cover .shape { font-size: 84px; line-height: 1; color: #e7b459; }
+  .cover button { border: 0; border-radius: 999px; padding: 18px 40px; background: var(--pink); color: #fff; font: 400 30px/1 'Bebas Neue', sans-serif; letter-spacing: .08em; box-shadow: 0 10px 34px rgba(237,27,118,.45); }
+  .cover.win h1 { color: var(--green); }
+  .cover.lose h1 { color: var(--pink); }
+  .shake { animation: shake .35s; }
+  @keyframes shake { 20% { transform: translateX(-8px) rotate(-1deg); } 40% { transform: translateX(7px) rotate(1deg); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
+</style>
+</head>
+<body>
+  <header>
+    <div class="title">DALG<i>○</i>NA</div>
+    <div class="no" id="no"></div>
+  </header>
+  <div class="bar">
+    <div class="lives" id="lives"></div>
+    <div class="progress"><i id="prog"></i></div>
+    <div class="time" id="time"></div>
+  </div>
+  <canvas id="candy"></canvas>
+  <p class="hint">Trace the line slowly. Off the line, or too fast, and it cracks.</p>
+
+  <div class="cover" id="cover">
+    <h1>Connecting…</h1>
+  </div>
+
+<script>
+  const q = new URLSearchParams(location.search)
+  const c = q.get('c')
+  const $ = (id) => document.getElementById(id)
+  const NAMES = { circle: 'circle', triangle: 'triangle', star: 'star', umbrella: 'umbrella', heart: 'heart', bolt: 'lightning bolt', octopus: 'octopus', bat: 'bat', pumpkin: 'jack-o’-lantern', ghost: 'ghost' }
+  const GLYPH = { circle: '○', triangle: '△', star: '☆', umbrella: '☂', heart: '♡', bolt: 'ϟ', octopus: '🐙', bat: '🦇', pumpkin: '🎃', ghost: '👻' }
+  // (distances in candy widths: on a phone the candy is ~340 px, so 0.01 ≈ 3 px)
+  const HIT = 0.02 // the needle carves the line within this much of it
+  const OFF = 0.028 // further than this off the line, the candy takes strain
+  const STRAIN = 0.035 // this much travel off the line is a crack (it never heals)
+  const FAST = 0.07 // the needle moving this far in one go: forced, it cracks
+  const STEP = 0.005 // the needle's path is checked this finely, so a swipe can't skip
+  // it's out only when the whole line is cut: no piece of it still joined
+  // longer than this many checkpoints (~0.016 of the candy: a slip, not a gap)
+  const GAP = 2
+
+  let setup = null, pass = null
+  let pts = [] // checkpoints along the line
+  let carved = []
+  let cracks = 0, crackLines = [], scratches = [], stroke = -1
+  let strain = 0, last = null, started = false, over = false
+  let outbox = { pts: [], crack: [] }
+
+  const cover = (html, cls = '') => { $('cover').className = 'cover ' + cls; $('cover').innerHTML = html; $('cover').hidden = false }
+
+  function checkpoints(strokes, step = 0.008) {
+    const out = []
+    for (const s of strokes) for (let i = 1; i < s.length; i++) {
+      const [x0, y0] = s[i - 1], [x1, y1] = s[i]
+      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / step))
+      for (let k = 0; k < n; k++) out.push([x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n])
+    }
+    return out
+  }
+
+  // ── drawing ──────────────────────────────────────────────
+  const cv = $('candy'), g = cv.getContext('2d')
+  let S = 0
+  // speckles fixed per page so the candy doesn't shimmer as it redraws
+  const specks = Array.from({ length: 260 }, () => {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 0.44
+    return [0.5 + r * Math.cos(a), 0.5 + r * Math.sin(a), Math.random() < 0.5, 0.002 + Math.random() * 0.005]
+  })
+  function size() {
+    const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1
+    S = Math.round(r.width * d); cv.width = cv.height = S; draw()
+  }
+  function draw() {
+    if (!S) return
+    g.clearRect(0, 0, S, S)
+    // the candy: a disc of pressed honeycomb, darker at the rim
+    const grad = g.createRadialGradient(S * .45, S * .42, S * .05, S * .5, S * .5, S * .46)
+    grad.addColorStop(0, '#f0c36c'); grad.addColorStop(.7, '#d99a3e'); grad.addColorStop(1, '#a86d22')
+    g.fillStyle = grad; g.beginPath(); g.arc(S / 2, S / 2, S * .46, 0, Math.PI * 2); g.fill()
+    for (const [x, y, light, r] of specks) { g.fillStyle = light ? 'rgba(255,236,190,.35)' : 'rgba(120,70,20,.25)'; g.beginPath(); g.arc(x * S, y * S, r * S, 0, Math.PI * 2); g.fill() }
+    if (!setup) return
+    // the stamped shape: a pressed groove
+    for (const [w, col, dy] of [[S * .016, 'rgba(255,230,170,.45)', S * .003], [S * .012, 'rgba(110,60,15,.6)', 0]]) {
+      g.strokeStyle = col; g.lineWidth = w; g.lineJoin = g.lineCap = 'round'
+      for (const s of setup.strokes) { g.beginPath(); s.forEach(([x, y], i) => i ? g.lineTo(x * S, y * S + dy) : g.moveTo(x * S, y * S + dy)); g.stroke() }
+    }
+    // carved: the needle has scraped it pale
+    g.fillStyle = '#fbe3a6'
+    pts.forEach(([x, y], i) => { if (carved[i]) { g.beginPath(); g.arc(x * S, y * S, S * .011, 0, Math.PI * 2); g.fill() } })
+    // the needle's scratches
+    g.strokeStyle = 'rgba(90,50,12,.35)'; g.lineWidth = S * .004
+    for (const s of scratches) { g.beginPath(); s.forEach(([x, y], i) => i ? g.lineTo(x * S, y * S) : g.moveTo(x * S, y * S)); g.stroke() }
+    // cracks
+    g.strokeStyle = '#3b220a'; g.lineWidth = S * .006
+    for (const l of crackLines) { g.beginPath(); l.forEach(([x, y], i) => i ? g.lineTo(x * S, y * S) : g.moveTo(x * S, y * S)); g.stroke() }
+  }
+  function crackFrom(x, y) {
+    // a jagged split running off toward the rim, with a branch
+    const a0 = Math.atan2(y - .5, x - .5) + (Math.random() - .5)
+    const run = (a, n, len) => { const l = [[x, y]]; let px = x, py = y; for (let i = 0; i < n; i++) { a += (Math.random() - .5) * 1.1; px += Math.cos(a) * len; py += Math.sin(a) * len; l.push([px, py]) } return l }
+    crackLines.push(run(a0, 6, .025), run(a0 + 1.2, 3, .02))
+  }
+
+  // every bit of the line cut? (each stroke on its own: the umbrella's handle
+  // is a separate cut)
+  function cutOut() {
+    let run = 0
+    for (let i = 0; i < pts.length; i++) {
+      run = carved[i] ? 0 : run + 1
+      if (run > GAP) return false
+    }
+    return true
+  }
+
+  function render() {
+    $('lives').innerHTML = Array.from({ length: setup?.lives ?? 3 }, (_, i) => `<b class="${i < cracks ? 'gone' : ''}"></b>`).join('')
+    const done = carved.filter(Boolean).length / (pts.length || 1)
+    $('prog').style.width = Math.min(100, done * 100) + '%'
+    // nearly there but still joined somewhere: point them back to it
+    document.querySelector('.hint').textContent = done > .85 && !cutOut() ? 'Not out yet: some of the line is still joined. Find the dark bits.' : 'Trace the line slowly. Off the line, or too fast, and it cracks.'
+    draw()
+    return done
+  }
+
+  // ── carving ──────────────────────────────────────────────
+  const at = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height] }
+  function nearest(x, y) { let d = Infinity; for (const [px, py] of pts) d = Math.min(d, Math.hypot(px - x, py - y)); return d }
+
+  // a crack: the candy gives where the needle is
+  // after a crack the candy settles for a moment: one slip is one crack, not
+  // three in the same split second (a fast swipe sends many moves at once)
+  const SETTLE = 900
+  let calm = 0
+  function hurt(x, y) {
+    if (over || performance.now() < calm) return
+    calm = performance.now() + SETTLE
+    strain = 0
+    cracks++; crackFrom(x, y); outbox.crack.push([x, y])
+    navigator.vibrate?.(cracks >= setup.lives ? [80, 40, 300] : 160)
+    cv.classList.remove('shake'); void cv.offsetWidth; cv.classList.add('shake')
+    if (cracks >= setup.lives) { render(); breakAt = [x, y]; finish('broken') }
+  }
+
+  function carve(x, y) {
+    if (!started || over) return
+    const from = last ?? [x, y]
+    const len = Math.hypot(x - from[0], y - from[1])
+    // racing or scribbling: too much force for the candy
+    if (last && len > FAST) { hurt(x, y); last = [x, y]; return }
+    // walk the needle's path in small steps: off the line, the strain builds
+    const n = Math.max(1, Math.ceil(len / STEP))
+    for (let k = 1; k <= n && !over; k++) {
+      const px = from[0] + (x - from[0]) * k / n, py = from[1] + (y - from[1]) * k / n
+      pts.forEach(([qx, qy], i) => { if (!carved[i] && Math.hypot(qx - px, qy - py) < HIT) carved[i] = true })
+      // (no strain builds while it settles from the last crack)
+      if (nearest(px, py) > OFF && performance.now() >= calm) {
+        strain += len / n
+        if (strain >= STRAIN) hurt(px, py)
+      }
+    }
+    last = [x, y]
+    scratches[stroke]?.push([x, y])
+    outbox.pts.push([+x.toFixed(4), +y.toFixed(4), stroke])
+    render()
+    if (!over && cutOut()) finish('done')
+  }
+
+  cv.addEventListener('pointerdown', (e) => {
+    if (!started || over) return
+    cv.setPointerCapture(e.pointerId)
+    stroke++; scratches[stroke] = []; last = null
+    const [x, y] = at(e)
+    // the needle stabbed into the candy away from the line
+    if (nearest(x, y) > OFF) hurt(x, y)
+    carve(x, y)
+  })
+  cv.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) for (const p of e.getCoalescedEvents?.() ?? [e]) carve(...at(p)) })
+  cv.addEventListener('pointerup', () => { last = null })
+
+  // what the big screen needs, a few times a second
+  let status = 'carving'
+  function flush() {
+    if (!pass || (!outbox.pts.length && !outbox.crack.length && status === 'carving')) return
+    const done = carved.filter(Boolean).length / (pts.length || 1)
+    // 1 only once it's cut out: the big screen's bar fills when they've done it
+    const msg = { pass, pts: outbox.pts, crack: outbox.crack, cracks, progress: status === 'done' ? 1 : Math.min(.99, done), status }
+    outbox = { pts: [], crack: [] }
+    fetch(`/remote/carve-move?c=${c}`, { method: 'POST', body: JSON.stringify(msg) }).catch(() => {})
+  }
+  setInterval(flush, 100)
+
+  // the last crack: the candy splits from where it gave and the pieces fall
+  // (the same pieces as the big screen's, give or take the jags)
+  let breakAt = [.5, .5]
+  let shattered = Promise.resolve() // the game's verdict waits for the pieces to fall
+  function shatter(then) {
+    const off = document.createElement('canvas'); off.width = off.height = S
+    off.getContext('2d').drawImage(cv, 0, 0)
+    const [x, y] = breakAt, n = 7
+    const angles = Array.from({ length: n }, (_, i) => ((i + .2 + Math.random() * .6) / n) * 2 * Math.PI).sort((a, b) => a - b)
+    const splits = angles.map((a) => Array.from({ length: 5 }, (_, k) => { const r = (k + 1) / 5 * .75, j = k < 4 ? (Math.random() - .5) * .12 : 0; return [x + r * Math.cos(a + j), y + r * Math.sin(a + j)] }))
+    const pieces = angles.map((a, i) => {
+      const b = angles[(i + 1) % n] + (i === n - 1 ? 2 * Math.PI : 0), mid = (a + b) / 2
+      const rim = Array.from({ length: 4 }, (_, k) => { const t = a + (k + 1) / 5 * (b - a); return [x + .8 * Math.cos(t), y + .8 * Math.sin(t)] })
+      return { pts: [[x, y], ...splits[i], ...rim, ...splits[(i + 1) % n].slice().reverse()], at: [x + .22 * Math.cos(mid), y + .22 * Math.sin(mid)],
+        dx: Math.cos(mid) * (.1 + Math.random() * .12), dy: Math.sin(mid) * (.1 + Math.random() * .12) + .35 + Math.random() * .2, turn: (Math.random() - .5) * 1.2 }
+    })
+    navigator.vibrate?.([60, 30, 60, 30, 260])
+    const t0 = performance.now(), MS = 1500
+    const frame = () => {
+      const t = Math.min(1, (performance.now() - t0) / MS), e = t * t
+      g.clearRect(0, 0, S, S)
+      g.globalAlpha = t < .8 ? 1 : 1 - (t - .8) / .2
+      for (const p of pieces) {
+        g.save()
+        g.translate((p.at[0] + p.dx * e) * S, (p.at[1] + p.dy * e) * S); g.rotate(p.turn * e); g.translate(-p.at[0] * S, -p.at[1] * S)
+        g.beginPath(); p.pts.forEach(([px, py], i) => i ? g.lineTo(px * S, py * S) : g.moveTo(px * S, py * S)); g.closePath(); g.clip()
+        g.drawImage(off, 0, 0)
+        g.restore()
+      }
+      g.globalAlpha = 1
+      if (t < 1) requestAnimationFrame(frame); else then()
+    }
+    requestAnimationFrame(frame)
+  }
+
+  function finish(s) {
+    if (over) return
+    over = true; status = s; flush()
+    if (s === 'broken') { shattered = new Promise((done) => shatter(done)); return shattered.then(() => cover('<h1>It broke</h1><p>Watch the big screen…</p>', 'lose')) }
+    cover(s === 'done' ? '<p>Done! Watch the big screen…</p>' : '<h1>It broke</h1><p>Watch the big screen…</p>', s === 'done' ? 'win' : 'lose')
+  }
+
+  function start() {
+    started = true
+    $('cover').hidden = true
+    fetch(`/remote/carve-move?c=${c}`, { method: 'POST', body: JSON.stringify({ pass, start: true, cracks: 0, progress: 0, pts: [], crack: [], status: 'carving' }) }).catch(() => {})
+  }
+
+  // ── the line to the game ─────────────────────────────────
+  const es = new EventSource(`/remote/carve-stream?c=${c}`)
+  es.onerror = () => {
+    if (es.readyState !== EventSource.CLOSED || over) return
+    over = true
+    cover(setup ? '<h1>Disconnected</h1><p>The game ended this round.</p>' : '<h1>Not yours</h1><p>This candy is already being carved, or the round is over.</p>', 'lose')
+  }
+  es.onmessage = (e) => {
+    const m = JSON.parse(e.data)
+    if (m.type === 'setup') {
+      setup = m; pass = m.pass
+      pts = checkpoints(m.strokes); carved = pts.map(() => false)
+      $('no').textContent = m.no ?? ''
+      $('time').textContent = m.seconds
+      render()
+      cover(`<div class="shape">${GLYPH[m.shape]}</div><h1>Your ${NAMES[m.shape]}</h1>
+        <p>${m.name ? `${m.name}, trace` : 'Trace'} the line slowly with your finger. Step off it, stab off it, or rush, and it cracks: ${m.lives} cracks and you're out. ${m.seconds} seconds.</p>
+        <button id="go">Start carving</button>`)
+      $('go').onclick = start
+    }
+    if (m.type === 'tick') { $('time').textContent = Math.ceil(m.left); $('time').classList.toggle('low', m.left <= 10) }
+    if (m.type === 'over') {
+      over = true; es.close()
+      shattered.then(() => cover(m.result === 'passed' ? '<h1>Survived</h1><p>You carved it out. ○</p>' : m.result === 'failed' ? '<h1>Eliminated</h1><p>✕</p>' : '<h1>Round over</h1>', m.result === 'passed' ? 'win' : 'lose'))
+    }
+  }
+
+  addEventListener('resize', size)
+  size()
+</script>
+</body>
+</html>

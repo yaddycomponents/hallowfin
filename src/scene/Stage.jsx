@@ -51,7 +51,7 @@ function Rig({ phase }) {
   }, [])
   useFrame(({ camera, clock }, dt) => {
     const kick = Math.max(0, 1 - (performance.now() / 1000 - shotAt.current) / 0.5) ** 2 * 0.18
-    const s = SHOTS[phase] ?? SHOTS.pick
+    const s = SHOTS[phase === 'dalgona' ? 'question' : phase] ?? SHOTS.pick
     camera.position.lerp(p.set(...s.pos), 1 - Math.exp(-dt * 1.6))
     // a slow handheld drift so the frame never sits dead still
     camera.position.x += Math.sin(clock.elapsedTime * 0.4) * 0.002

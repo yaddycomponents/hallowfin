@@ -4,6 +4,8 @@
 //   public/audio/lobby.mp3     — loops in the lobby and while picking (e.g. "Way Back Then")
 //   public/audio/redlight.mp3  — plays while the question timer runs (the doll's song)
 //   public/audio/dare.mp3      — loops under a dare (e.g. "Pink Soldiers")
+//   public/audio/dalgona.mp3   — loops while a player carves dalgona
+//   public/audio/called.mp3    — under a player's call, till their turn starts (e.g. "Round VI")
 
 let ctx = null
 export const ac = () => (ctx ??= new (window.AudioContext || window.webkitAudioContext)())
@@ -59,6 +61,14 @@ export const sfx = {
     noise({ dur: 0.5, vol: 0.12, lp: 2500, at: 0.28 })
   },
   survived: () => [523, 659, 784, 1047].forEach((f, i) => tone({ f, type: 'triangle', dur: 0.4, vol: 0.18, at: i * 0.09 })),
+  // the candy gives: a dry snap
+  crack: () => { tone({ f: 2400, f2: 180, type: 'square', dur: 0.07, vol: 0.12 }); tone({ f: 900, f2: 120, type: 'sawtooth', dur: 0.12, vol: 0.08, at: 0.03 }) },
+  // the whole candy giving way: a crunch, then the pieces hitting the tray
+  shatter: () => {
+    noise({ dur: 0.35, vol: 0.8, lp: 6000 })
+    tone({ f: 1900, f2: 140, type: 'square', dur: 0.12, vol: 0.14 })
+    ;[0.18, 0.27, 0.33, 0.42].forEach((at, i) => noise({ dur: 0.05, vol: 0.3 - i * 0.05, lp: 4000, at }))
+  },
   unlock: () => ac().resume(),
 }
 
@@ -81,7 +91,7 @@ function track(name) {
   return tracks[name]
 }
 // fetch both at page load, so the first play is instant
-if (typeof window !== 'undefined') ['lobby', 'redlight'].forEach((n) => track(n).load())
+if (typeof window !== 'undefined') ['lobby', 'redlight', 'called'].forEach((n) => track(n).load())
 
 const fades = {}
 function fade(a, to, ms, then) {
@@ -110,16 +120,38 @@ export function songTime(name) {
 }
 
 // where a song is or will resume from, playing or not (null when the file is
-// missing); duration so a ride can follow it round the loop
+// missing): the lyrics follow it
 export function songAt(name) {
   const a = tracks[name]
-  return a && !a.dataset.missing ? { time: a.currentTime, playing: !a.paused, duration: a.duration || Infinity } : null
+  return a && !a.dataset.missing ? { time: a.currentTime, playing: !a.paused } : null
+}
+
+// the host's "stop the music": whatever is playing fades out
+export function stopAllMusic(ms = 700) {
+  for (const name of Object.keys(tracks)) if (name !== 'redlight') stopMusic(name, ms)
 }
 
 // move a song to a point (playing or not), e.g. a few bars before a cue
 export function seekSong(name, t) {
   const a = tracks[name]
   if (a && !a.dataset.missing) a.currentTime = t
+}
+
+// the show's stop: the song winds down like a record losing power (pitch and
+// speed sag together) as it fades, then rests, ready to pick up from there
+export function windDown(name, ms = 1500) {
+  const a = tracks[name]
+  if (!a || a.paused) return
+  clearInterval(fades[a.src])
+  a.preservesPitch = false
+  const from = a.volume
+  const t0 = performance.now()
+  fades[a.src] = setInterval(() => {
+    const p = Math.min(1, (performance.now() - t0) / ms)
+    a.playbackRate = Math.max(0.3, 1 - 0.7 * p * p)
+    a.volume = from * (1 - p) ** 1.6
+    if (p === 1) { clearInterval(fades[a.src]); a.pause(); a.playbackRate = 1 }
+  }, 30)
 }
 
 export function stopMusic(name, ms = 600) {

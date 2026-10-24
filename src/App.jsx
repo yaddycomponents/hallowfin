@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useGame } from './game/useGame'
 import { playerNo } from './game/data'
 import { heardAnswer, saidSomething } from './game/match'
-import { music, seekSong, sfx, sing, stopMusic } from './audio/sound'
+import { music, seekSong, sfx, sing, stopAllMusic, stopMusic } from './audio/sound'
 import { announce, canListen, hush, listen } from './audio/speech'
 import { Stage } from './scene/Stage'
 import { tileShape } from './scene/NumberFloor'
 import { Lobby } from './ui/Lobby'
+import { useRemote } from './remote/useRemote'
+import { GLYPH, NAMES } from './game/dalgona'
+import { DalgonaPanel } from './ui/Dalgona'
 import { ShapeBtn } from './ui/ShapeBtn'
 import { IconBtn } from './ui/IconBtn'
 import { UserX } from 'lucide-react'
@@ -32,6 +35,8 @@ function chant() {
 
 export default function App() {
   const g = useGame()
+  // the draw is riding the song (the phone shows Stop the music)
+  const [drawing, setDrawing] = useState(false)
   const { run, config, current } = g
   const phase = run.phase
   const demo = !!run.demo
@@ -68,16 +73,43 @@ export default function App() {
     else stopMusic('dare', 700)
   }, [phase])
 
+  // M: the host stops the music (the song after a draw, the dare's theme, …)
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key !== 'm' || e.repeat || e.target.closest?.('input, textarea')) return
+      stopAllMusic()
+    }
+    addEventListener('keydown', k)
+    return () => removeEventListener('keydown', k)
+  }, [])
+
+  // the player has the mic: the host gives them a question (Space), or a
+  // dalgona to carve (D)
+  const begin = (kind = 'question') => g.to(kind)
+  // dalgona: the song stops, the candy's own theme plays while they carve
+  useEffect(() => {
+    if (phase !== 'dalgona') return
+    stopMusic('lobby', 400)
+    music('dalgona', 0.4, { restart: true })
+    return () => stopMusic('dalgona', 700)
+  }, [phase])
+
   // a name is called: she announces it, then the game waits while the player
   // walks up and takes the mic; the host starts the question (Space or ▶)
   useEffect(() => {
     if (phase !== 'picked') return
-    // the song stops on the draw, so the call carries in a quiet room
-    stopMusic('lobby', 500)
+    // under the call and their walk up: a low, tense theme (public/audio/
+    // called.mp3, if it's there), quiet so her voice carries; it fades as
+    // their turn starts, or the host stops it (M, or the phone)
+    music('called', 0.3, { restart: true })
     say('call', no)
-    const k = (e) => { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); g.to('question') } }
+    const k = (e) => {
+      if (e.repeat || e.target.closest?.('input, textarea')) return
+      if (e.code === 'Space') { e.preventDefault(); begin('question') }
+      if (e.key === 'd') begin('dalgona')
+    }
     addEventListener('keydown', k)
-    return () => removeEventListener('keydown', k)
+    return () => { removeEventListener('keydown', k); stopMusic('called', 700) }
   }, [phase])
 
   // green light: she reads the question; then the clock and the mic start together
@@ -128,7 +160,7 @@ export default function App() {
 
   const onVerdict = useCallback((r) => {
     // once per question, whoever gets there first (the mic, the host, a key)
-    if (phaseRef.current !== 'question' && phaseRef.current !== 'redlight') return
+    if (phaseRef.current !== 'question' && phaseRef.current !== 'redlight' && phaseRef.current !== 'dalgona') return
     phaseRef.current = r
     if (r === 'failed') sfx.eliminated()
     else sfx.survived()
@@ -256,6 +288,25 @@ export default function App() {
   }
   const inGame = phase !== 'lobby'
 
+  // the phone remote: what it shows. Who's up only once they're called (the
+  // draw is decided before the spin; the phone mustn't spoil it)
+  const called = !['lobby', 'pick', 'end'].includes(phase)
+  const remote = useRemote({
+    phase,
+    demo,
+    spinning: phase === 'pick' && drawing,
+    no: called ? no : '',
+    name: called ? current.player : '',
+    question: !called ? '' : phase === 'dalgona' ? `Dalgona: ${GLYPH[current.shape]} ${NAMES[current.shape]} (they carve it on their phone)` : current.question?.q,
+    answer: called && phase !== 'dalgona' ? current.question?.a : '',
+    dare: phase === 'eliminated' || phase === 'dare' ? current.dare : '',
+    remaining: g.remaining.length,
+    total: config.players.length,
+  })
+
+  // a phone has the controls: the on-screen buttons step aside (keys still work)
+  useEffect(() => { document.body.classList.toggle('remote-on', remote.phones > 0) }, [remote.phones])
+
   // the player wall: every name's number, its result so far, and who's on the
   // spot (never revealed before the reel lands)
   const roster = useMemo(() => {
@@ -277,17 +328,19 @@ export default function App() {
           config={g.setup}
           setConfig={g.setConfig}
           onStart={start}
+          remote={remote}
           onDemo={() => { sfx.unlock(); warmMic(); seekSong('lobby', 0); g.demo() }}
           canResume={run.log.length > 0 && run.turn < config.players.length}
           onResume={() => { sfx.unlock(); g.resume() }}
         />
       )}
-      {inGame && phase !== 'end' && <Hud run={run} remaining={g.remaining.length} total={config.players.length} prize={g.won} onLobby={g.lobby} config={config} setConfig={g.setConfig} listening={phase === 'question' && stage === 'clock' && config.mic && canListen} />}
+      {inGame && phase !== 'end' && <Hud run={run} remaining={g.remaining.length} total={config.players.length} prize={g.won} onLobby={g.lobby} remote={remote} config={config} setConfig={g.setConfig} listening={phase === 'question' && stage === 'clock' && config.mic && canListen} />}
       {(phase === 'pick' || phase === 'picked') && (
-        <PickPanel remaining={g.remaining} target={current.playerIndex} phase={phase} auto={run.auto} onLanded={() => setTimeout(() => g.to('picked'), 1100)} />
+        <PickPanel onRunning={setDrawing} remaining={g.remaining} target={current.playerIndex} phase={phase} auto={run.auto} onLanded={() => setTimeout(() => g.to('picked'), 1100)} />
       )}
       {phase === 'picked' && <Called name={current.player} shape={tileShape(config.players.length, current.playerIndex)} />}
-      {phase === 'picked' && <ShapeBtn shape="next" label="Start the question" keyName="Space" className="next-slot" onClick={() => g.to('question')} />}
+      {phase === 'picked' && <ShapeBtn shape="next" label="Start the question" keyName="Space" className="next-slot" onClick={() => begin('question')} />}
+      {phase === 'picked' && <button className="dalgona-btn" onClick={() => begin('dalgona')} data-tip="Carve a dalgona instead · D">달고나 <kbd>D</kbd></button>}
       {canSkip && <IconBtn icon={UserX} label="Not here today · respin (N)" className="absent-btn" onClick={skip} />}
       {(phase === 'question' || phase === 'redlight') && current.question && (
         <QuestionPanel
@@ -306,6 +359,9 @@ export default function App() {
           grace={GRACE}
           onVerdict={onVerdict}
         />
+      )}
+      {phase === 'dalgona' && (
+        <DalgonaPanel key={run.turn} shape={current.shape} player={current.player} no={no} remote={remote} onVerdict={onVerdict} />
       )}
       {phase === 'survived' && (
         <>

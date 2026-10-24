@@ -1,5 +1,6 @@
 // Players, questions and dares: seeded here, editable in the lobby, kept in
-// this browser's localStorage. Nothing leaves the machine — no backend.
+// this tab's sessionStorage (closing the tab clears it). Nothing leaves the
+// machine — no backend.
 
 export const DEFAULTS = {
   players: ['Player One', 'Player Two', 'Player Three', 'Player Four', 'Player Five', 'Player Six'],
@@ -79,7 +80,7 @@ const bare = (line) => line.replace(/^(?:[-*+•–—]\s*|\d+[.)]\s+)+/, '').re
 
 export function load() {
   try {
-    const s = JSON.parse(localStorage.getItem(KEY))
+    const s = JSON.parse(sessionStorage.getItem(KEY))
     // older saves may hold names with a bullet still on them
     if (s && Array.isArray(s.players)) return { ...DEFAULTS, ...s, players: s.players.map(bare).filter(Boolean) }
   } catch {}
@@ -87,7 +88,7 @@ export function load() {
 }
 
 export function save(state) {
-  try { localStorage.setItem(KEY, JSON.stringify(state)) } catch {}
+  try { sessionStorage.setItem(KEY, JSON.stringify(state)) } catch {}
 }
 
 // A dropped .md file:

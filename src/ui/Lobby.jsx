@@ -9,6 +9,7 @@ import { IconBtn } from './IconBtn'
 import { Shapes } from './Shapes'
 import { FileDown, FolderOpen, Maximize, Minimize, Presentation, RotateCcw, Upload } from 'lucide-react'
 import { ShapeBtn } from './ShapeBtn'
+import { RemoteBtn } from './RemoteBtn'
 
 gsap.registerPlugin(useGSAP)
 
@@ -19,7 +20,7 @@ const NO_LINES = ['No', 'Are you sure?', 'Your debt says otherwise', 'There is n
 
 const asPhone = (s) => s.toUpperCase().match(/.{1,4}/g)?.join(' ') ?? ''
 
-export function Lobby({ config, setConfig, onStart, onDemo, canResume, onResume }) {
+export function Lobby({ config, setConfig, onStart, onDemo, remote, canResume, onResume }) {
   const [seed, setSeed] = useState(newSeed)
   const [editingSeed, setEditingSeed] = useState(false)
   const [face, setFace] = useState('front')
@@ -150,6 +151,7 @@ export function Lobby({ config, setConfig, onStart, onDemo, canResume, onResume 
       </div>
 
       <div className="lobby-corner">
+        <RemoteBtn remote={remote} />
         <IconBtn icon={Presentation} label="Demo: show the team how to play" onClick={() => { enterFull(); onDemo() }} />
         <IconBtn icon={Upload} label="Upload a .md list" onClick={() => upload.current.click()} />
         <IconBtn icon={FolderOpen} label="Player files" onClick={() => setFiles(true)} />
