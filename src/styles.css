@@ -443,7 +443,7 @@ kbd { font-family: var(--body); font-size: 11px; padding: 2px 6px; border-radius
 .dalgona .groove.light { stroke: rgba(255,230,170,.45); stroke-width: .016; transform: translateY(.003px); }
 .dalgona .scrape { fill: none; stroke: #fbe3a6; stroke-width: .02; stroke-linecap: round; stroke-linejoin: round; opacity: .9; }
 .dalgona .split { fill: none; stroke: #2e1a07; stroke-width: .007; stroke-linejoin: round; animation: split .25s ease-out both; }
-.dalgona .needle { fill: #fff; stroke: rgba(0,0,0,.5); stroke-width: .004; filter: drop-shadow(0 0 .01px #fff); }
+.dalgona .needle { filter: drop-shadow(0 .004px .004px rgba(0,0,0,.35)); }
 @keyframes split { from { stroke-dasharray: .2; stroke-dashoffset: .2; } to { stroke-dashoffset: 0; } }
 .dalgona-side { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; min-width: 300px; max-width: 420px; color: #fff; }
 .dalgona-title { font: 400 64px/1 var(--num); letter-spacing: .08em; }

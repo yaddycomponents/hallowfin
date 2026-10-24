@@ -74,6 +74,8 @@
   .sent { position: fixed; left: 50%; top: max(64px, calc(env(safe-area-inset-top) + 48px)); transform: translateX(-50%); padding: 8px 14px; border-radius: 999px; background: #fff; color: var(--ink); font: 400 15px/1 var(--num); letter-spacing: .14em; opacity: 0; transition: opacity .2s; pointer-events: none; }
   .sent.show { opacity: 1; }
 </style>
+<!-- where the relay is (the AWS WebSocket); a ?w= link overrides it -->
+<script src="/backend.js"></script>
 </head>
 <body>
   <header>
@@ -152,31 +154,41 @@
   }
 
   let toast
-  $('pad').addEventListener('click', async (e) => {
-    const b = e.target.closest('button')
-    if (!b) return
-    navigator.vibrate?.(30)
-    const r = await fetch(`/remote/cmd?k=${key}`, { method: 'POST', body: JSON.stringify({ cmd: b.dataset.cmd }) }).catch(() => null)
-    const sent = r && (await r.json().catch(() => ({}))).sent
-    if (!r?.ok) ended()
-    $('sent').textContent = sent ? '전송 · SENT' : '연결 끊김 · DISCONNECTED'
+  const flash = (text) => {
+    $('sent').textContent = text
     $('sent').classList.add('show')
     clearTimeout(toast)
     toast = setTimeout(() => $('sent').classList.remove('show'), 1200)
+  }
+  $('pad').addEventListener('click', (e) => {
+    const b = e.target.closest('button')
+    if (!b) return
+    navigator.vibrate?.(30)
+    if (ws?.readyState !== 1) return flash('연결 끊김 · OFFLINE')
+    ws.send(JSON.stringify({ action: 'cmd', key, cmd: b.dataset.cmd, id: String(Date.now()) }))
   })
 
   render(null)
-  const es = new EventSource(`/remote/phone?k=${key}`)
   const status = (text, on) => { $('conn').textContent = text; $('conn').classList.toggle('on', on) }
+  // the line to the game, through the relay: a WebSocket that comes back by
+  // itself if the phone sleeps or the Wi-Fi drops
+  const W = new URLSearchParams(location.search).get('w') || window.SQUID_WS
+  let ws = null
   // the game's tab closed (or this is an old link): the session is over, for good
-  const ended = () => { es.close(); game = false; status('OFFLINE', false); render(last) }
-  es.onopen = () => status('LIVE', true)
-  es.onerror = () => { if (es.readyState === EventSource.CLOSED) ended(); else status('RECONNECTING', false) }
-  es.onmessage = (e) => {
-    const m = JSON.parse(e.data)
-    if (m.type === 'state') render(m.state)
-    if (m.type === 'ended') ended()
+  const ended = () => { game = false; ws?.close(); status('OFFLINE', false); render(last) }
+  function connect() {
+    ws = new WebSocket(W)
+    ws.onopen = () => { status('LIVE', true); ws.send(JSON.stringify({ action: 'phone', key })) }
+    ws.onclose = () => { if (!game) return; status('RECONNECTING', false); setTimeout(connect, 1500) }
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data)
+      if (m.type === 'state') render(m.state)
+      if (m.type === 'sent') flash('전송 · SENT')
+      if (m.type === 'ended') ended()
+    }
   }
+  setInterval(() => { if (ws?.readyState === 1) ws.send(JSON.stringify({ action: 'ping' })) }, 4 * 60 * 1000)
+  if (key && W) connect(); else ended()
 </script>
 </body>
 </html>

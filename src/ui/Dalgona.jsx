@@ -27,15 +27,14 @@ export function DalgonaPanel({ shape, player, no, remote, onVerdict }) {
   const key = remote.info?.key
   // the listeners below are set up once: they read these fresh
   const latest = useRef()
-  latest.current = { key, onVerdict }
+  latest.current = { remote, onVerdict }
 
   const decide = (result) => {
     if (decided.current) return
     decided.current = true
     setStage('done')
     setResult(result)
-    const { key } = latest.current
-    if (key) fetch(`/remote/carve-close?k=${key}`, { method: 'POST', body: JSON.stringify({ result: result === 'answered' ? 'passed' : 'failed' }) }).catch(() => {})
+    latest.current.remote.send('carveClose', { result: result === 'answered' ? 'passed' : 'failed' })
     // a beat for the room to see it: the shape carved out, or the candy in pieces
     setTimeout(() => latest.current.onVerdict(result), broke.current ? 2200 : 1500)
   }
@@ -44,14 +43,13 @@ export function DalgonaPanel({ shape, player, no, remote, onVerdict }) {
   useEffect(() => {
     if (!key) return
     let live = true
-    fetch(`/remote/carve-open?k=${key}`, { method: 'POST', body: JSON.stringify({ shape, strokes, seconds: SECONDS, lives: LIVES, done: DONE, no, name: player }) })
-      .then((r) => r.json())
+    remote.request('carveOpen', { setup: { shape, strokes, seconds: SECONDS, lives: LIVES, done: DONE, no, name: player } })
       .then(({ urls }) => { if (live && urls[0]) { setUrl(urls[0]); QRCode.toDataURL(urls[0], { margin: 1, width: 440 }).then(setQr) } })
       .catch(() => {})
     return () => {
       live = false
       // left early (the host judged it, or went home): the phone's round is over
-      if (!decided.current) fetch(`/remote/carve-close?k=${key}`, { method: 'POST', body: '{}' }).catch(() => {})
+      if (!decided.current) latest.current.remote.send('carveClose', {})
     }
   }, [key, shape])
 
@@ -95,7 +93,7 @@ export function DalgonaPanel({ shape, player, no, remote, onVerdict }) {
       setLeft(s)
       const whole = Math.ceil(s)
       if (whole <= 5 && whole > 0 && whole !== beat) { beat = whole; sfx.heart() }
-      if (whole !== sent && key) { sent = whole; fetch(`/remote/carve-tick?k=${key}`, { method: 'POST', body: JSON.stringify({ left: s }) }).catch(() => {}) }
+      if (whole !== sent && key) { sent = whole; remote.send('carveTick', { left: s }) }
       if (s === 0) { clearInterval(id); decide('failed') }
     }, 100)
     return () => clearInterval(id)
@@ -121,7 +119,14 @@ export function DalgonaPanel({ shape, player, no, remote, onVerdict }) {
       <path d={pathOf(strokes)} className="groove" />
       {lines.map((l, i) => l.length > 1 && <polyline key={i} points={l.map((p) => p.join(',')).join(' ')} className="scrape" />)}
       {splits.map((l, i) => <polyline key={i} points={l.map((p) => p.join(',')).join(' ')} className="split" />)}
-      {tip && stage === 'carving' && <circle cx={tip[0]} cy={tip[1]} r=".012" className="needle" />}
+      {tip && stage === 'carving' && (
+        // the needle, tip on the candy, leaning back toward their hand
+        <g className="needle" transform={`translate(${tip[0]} ${tip[1]}) rotate(-16)`}>
+          <path d="M.006 .004 L-.002 .22 Q.006 .236 .014 .22 Z" fill="rgba(60,30,5,.3)" />
+          <path d="M0 0 L-.008 .22 Q0 .236 .008 .22 Z" fill="url(#steel)" />
+          <ellipse cx="0" cy=".198" rx=".0024" ry=".011" fill="#1a1006" />
+        </g>
+      )}
     </>
   )
   return (
@@ -134,6 +139,11 @@ export function DalgonaPanel({ shape, player, no, remote, onVerdict }) {
               <stop offset=".7" stopColor="#d99a3e" />
               <stop offset="1" stopColor="#a86d22" />
             </radialGradient>
+            <linearGradient id="steel" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0" stopColor="#8d949b" />
+              <stop offset=".45" stopColor="#ffffff" />
+              <stop offset="1" stopColor="#6c737a" />
+            </linearGradient>
             {pieces?.map((p, i) => <clipPath key={i} id={`shard-${i}`}><polygon points={p.points.map((q) => q.join(',')).join(' ')} /></clipPath>)}
           </defs>
           {pieces
@@ -154,8 +164,8 @@ export function DalgonaPanel({ shape, player, no, remote, onVerdict }) {
 
         {stage === 'scan' && (
           qr
-            ? <div className="dalgona-qr"><img src={qr} alt="Scan to carve" /><p>Scan with your phone to get your candy</p></div>
-            : <p className="dalgona-note">{key ? 'Making your candy…' : 'Carving needs the phone remote (run the game with npm run dev, on Wi-Fi). Judge with A / F.'}</p>
+            ? <div className="dalgona-qr"><img src={qr} alt="Scan to carve" data-url={url} /><p>Scan with your phone to get your candy</p></div>
+            : <p className="dalgona-note">{key ? 'Making your candy…' : 'Carving needs the phone link, and it isn’t connected. Judge with A / F.'}</p>
         )}
         {stage === 'ready' && <p className="dalgona-note big">Got it. Press <b>Start carving</b> on your phone…</p>}
         {(stage === 'carving' || stage === 'done') && (

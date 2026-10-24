@@ -36,6 +36,8 @@
   .shake { animation: shake .35s; }
   @keyframes shake { 20% { transform: translateX(-8px) rotate(-1deg); } 40% { transform: translateX(7px) rotate(1deg); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
 </style>
+<!-- where the relay is (the AWS WebSocket); a ?w= link overrides it -->
+<script src="/backend.js"></script>
 </head>
 <body>
   <header>
@@ -124,7 +126,26 @@
     // cracks
     g.strokeStyle = '#3b220a'; g.lineWidth = S * .006
     for (const l of crackLines) { g.beginPath(); l.forEach(([x, y], i) => i ? g.lineTo(x * S, y * S) : g.moveTo(x * S, y * S)); g.stroke() }
+    if (needle && !over) drawNeedle(needle)
   }
+  // a sewing needle, tip on the candy, leaning back toward the fingertip
+  function drawNeedle([x, y]) {
+    g.save()
+    g.translate(x * S, y * S); g.rotate(-16 * Math.PI / 180)
+    const L = S * .22, W = S * .008
+    // its shadow on the candy, then the steel
+    g.fillStyle = 'rgba(60,30,5,.3)'
+    g.beginPath(); g.moveTo(S * .006, S * .004); g.lineTo(S * .006 - W, L); g.quadraticCurveTo(S * .006, L + W * 2, S * .006 + W, L); g.closePath(); g.fill()
+    const steel = g.createLinearGradient(-W, 0, W, 0)
+    steel.addColorStop(0, '#8d949b'); steel.addColorStop(.45, '#ffffff'); steel.addColorStop(1, '#6c737a')
+    g.fillStyle = steel
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(-W, L); g.quadraticCurveTo(0, L + W * 2, W, L); g.closePath(); g.fill()
+    // the eye
+    g.fillStyle = '#1a1006'
+    g.beginPath(); g.ellipse(0, L * .9, W * .3, S * .011, 0, 0, Math.PI * 2); g.fill()
+    g.restore()
+  }
+
   function crackFrom(x, y) {
     // a jagged split running off toward the rim, with a branch
     const a0 = Math.atan2(y - .5, x - .5) + (Math.random() - .5)
@@ -154,7 +175,11 @@
   }
 
   // ── carving ──────────────────────────────────────────────
-  const at = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height] }
+  // the needle's tip does the carving, held a little above the fingertip so
+  // the finger never hides the line it's cutting
+  const LIFT = 38 // px above the touch
+  const at = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top - LIFT) / r.height] }
+  let needle = null // where the tip is, while a finger is down
   function nearest(x, y) { let d = Infinity; for (const [px, py] of pts) d = Math.min(d, Math.hypot(px - x, py - y)); return d }
 
   // a crack: the candy gives where the needle is
@@ -190,6 +215,7 @@
       }
     }
     last = [x, y]
+    needle = [x, y]
     scratches[stroke]?.push([x, y])
     outbox.pts.push([+x.toFixed(4), +y.toFixed(4), stroke])
     render()
@@ -206,7 +232,7 @@
     carve(x, y)
   })
   cv.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) for (const p of e.getCoalescedEvents?.() ?? [e]) carve(...at(p)) })
-  cv.addEventListener('pointerup', () => { last = null })
+  cv.addEventListener('pointerup', () => { last = null; needle = null; draw() })
 
   // what the big screen needs, a few times a second
   let status = 'carving'
@@ -216,7 +242,7 @@
     // 1 only once it's cut out: the big screen's bar fills when they've done it
     const msg = { pass, pts: outbox.pts, crack: outbox.crack, cracks, progress: status === 'done' ? 1 : Math.min(.99, done), status }
     outbox = { pts: [], crack: [] }
-    fetch(`/remote/carve-move?c=${c}`, { method: 'POST', body: JSON.stringify(msg) }).catch(() => {})
+    say({ action: 'move', c, ...msg })
   }
   setInterval(flush, 100)
 
@@ -265,18 +291,28 @@
   function start() {
     started = true
     $('cover').hidden = true
-    fetch(`/remote/carve-move?c=${c}`, { method: 'POST', body: JSON.stringify({ pass, start: true, cracks: 0, progress: 0, pts: [], crack: [], status: 'carving' }) }).catch(() => {})
+    say({ action: 'move', c, pass, start: true, cracks: 0, progress: 0, pts: [], crack: [], status: 'carving' })
   }
 
   // ── the line to the game ─────────────────────────────────
-  const es = new EventSource(`/remote/carve-stream?c=${c}`)
-  es.onerror = () => {
-    if (es.readyState !== EventSource.CLOSED || over) return
-    over = true
-    cover(setup ? '<h1>Disconnected</h1><p>The game ended this round.</p>' : '<h1>Not yours</h1><p>This candy is already being carved, or the round is over.</p>', 'lose')
+  // a WebSocket to the relay; if it drops mid-carve, it reconnects and picks
+  // the candy back up (a fresh pass, the carving so far kept)
+  const W = q.get('w') || window.SQUID_WS
+  let ws = null
+  const say = (msg) => { if (ws?.readyState === 1) ws.send(JSON.stringify(msg)) }
+  function connect() {
+    ws = new WebSocket(W)
+    ws.onopen = () => say({ action: 'carve', c })
+    ws.onclose = () => { if (!over) setTimeout(connect, 1500) }
+    ws.onmessage = (e) => hear(JSON.parse(e.data))
   }
-  es.onmessage = (e) => {
-    const m = JSON.parse(e.data)
+  setInterval(() => say({ action: 'ping' }), 4 * 60 * 1000) // the line closes after 10 quiet minutes
+  function hear(m) {
+    if (m.type === 'denied') {
+      over = true; ws.close()
+      cover(setup ? '<h1>Disconnected</h1><p>The game ended this round.</p>' : '<h1>Not yours</h1><p>This candy is already being carved, or the round is over.</p>', 'lose')
+    }
+    if (m.type === 'setup' && setup) { pass = m.pass; return } // back after a drop: carry on
     if (m.type === 'setup') {
       setup = m; pass = m.pass
       pts = checkpoints(m.strokes); carved = pts.map(() => false)
@@ -284,19 +320,21 @@
       $('time').textContent = m.seconds
       render()
       cover(`<div class="shape">${GLYPH[m.shape]}</div><h1>Your ${NAMES[m.shape]}</h1>
-        <p>${m.name ? `${m.name}, trace` : 'Trace'} the line slowly with your finger. Step off it, stab off it, or rush, and it cracks: ${m.lives} cracks and you're out. ${m.seconds} seconds.</p>
+        <p>${m.name ? `${m.name}, trace` : 'Trace'} the line slowly. The needle's tip does the cutting: it sits just above your finger, so you can see the line. Step off it, stab off it, or rush, and it cracks: ${m.lives} cracks and you're out. ${m.seconds} seconds.</p>
         <button id="go">Start carving</button>`)
       $('go').onclick = start
     }
     if (m.type === 'tick') { $('time').textContent = Math.ceil(m.left); $('time').classList.toggle('low', m.left <= 10) }
     if (m.type === 'over') {
-      over = true; es.close()
+      over = true; ws.close()
       shattered.then(() => cover(m.result === 'passed' ? '<h1>Survived</h1><p>You carved it out. ○</p>' : m.result === 'failed' ? '<h1>Eliminated</h1><p>✕</p>' : '<h1>Round over</h1>', m.result === 'passed' ? 'win' : 'lose'))
     }
   }
 
   addEventListener('resize', size)
   size()
+  if (!c || !W) cover('<h1>Not yours</h1><p>This link is missing its candy.</p>', 'lose')
+  else connect()
 </script>
 </body>
 </html>

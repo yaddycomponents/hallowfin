@@ -8,3 +8,7 @@ assets-src/
 # local secrets, never commit
 .env
 .env.*
+
+# CDK build output and deploy results
+infra/cdk.out
+infra/out.json

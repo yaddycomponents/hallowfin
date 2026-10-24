@@ -15,6 +15,30 @@ Static site, no backend: lists and the game in progress live in the tab's
 sessionStorage (closing the tab starts fresh), and a
 `.md` upload is read locally with FileReader.
 
+## Phone remote and dalgona (the relay)
+
+The host's phone remote and the players' dalgona carving talk to the game
+through a small relay, over WebSocket:
+
+    game tab / phones ──▶ API Gateway WebSocket ──▶ Lambda ◀──▶ DynamoDB    (AWS, any network)
+    game tab / phones ──▶ the dev server's /remote-ws, in memory           (fallback: npm run dev, same Wi-Fi)
+
+The rules are one module, `relay/core.js`, run by both: `relay/lambda.js` on
+AWS and `tools/remote.js` in the dev server. The game tries AWS first
+(`public/backend.js` holds its address) and, under `npm run dev`, falls back to
+the laptop when AWS can't be reached. The phone pages are `public/remote.html`
+and `public/dalgona.html`.
+
+Deploy or update the AWS side (CDK, in `infra/`; writes `public/backend.js`):
+
+    cd infra && npm install
+    AWS_PROFILE=<profile> npx cdk bootstrap     # once per account and region
+    AWS_PROFILE=<profile> npm run deploy
+
+`npm run destroy` (in `infra/`) removes it all. It costs fractions of a cent
+per party: you pay per message and per connected minute, and every session
+expires by itself.
+
 ## Controls
 
 | Key   | When            | Does                         |
@@ -115,3 +139,7 @@ a game exactly.
     src/scene   Stage (camera, lights), Field (arena), Doll (head turn)
     src/ui      Lobby (business card), FlapBoard (name board), Panels (HUD, question, O/X, penalty card, end)
     src/audio   sound.js (synth SFX + music tracks)
+    src/remote  link.js (the game's WebSocket to the relay), useRemote.js
+    relay       core.js (the relay's rules), lambda.js (on AWS)
+    infra       CDK: the WebSocket API, the Lambda, the DynamoDB table
+    public      remote.html (host's phone), dalgona.html (player's phone), backend.js

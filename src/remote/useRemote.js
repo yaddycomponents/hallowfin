@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { openLink } from './link'
 
 // The phone remote, game side. The phone's buttons arrive as commands and are
 // pressed as the keys the host would press, so they run exactly the keyboard's
@@ -20,29 +21,35 @@ export function useRemote(state) {
   const [phones, setPhones] = useState(0)
   const phase = useRef(state.phase)
   phase.current = state.phase
+  const link = useRef(null)
 
   useEffect(() => {
     // this tab's session: opening it makes a fresh key (the QR code); closing
-    // the tab ends it and lets the phones go. No relay (a built copy): nothing
-    const events = new EventSource('/remote/game')
-    events.onmessage = (e) => {
-      const m = JSON.parse(e.data)
-      if (m.type === 'session') setInfo(m)
-      if (m.type === 'phones') setPhones(m.n)
-      // a player carving dalgona on their phone: the big screen follows it
-      if (m.type === 'carve') dispatchEvent(new CustomEvent('remote-carve', { detail: m }))
-      const k = m.type === 'cmd' && KEYS[m.cmd]
-      if (k && k.in.includes(phase.current)) dispatchEvent(new KeyboardEvent('keydown', { key: k.key, code: k.code }))
-    }
-    // the line dropped (the dev server restarted): the next session is new
-    events.onerror = () => { setInfo(null); setPhones(0) }
-    return () => events.close()
+    // the tab ends it and lets the phones go
+    const l = openLink({
+      onSession: (s) => { setInfo(s); if (!s) setPhones(0) },
+      onMessage: (m) => {
+        if (m.type === 'phones') setPhones(m.n)
+        // a player carving dalgona on their phone: the big screen follows it
+        if (m.type === 'carve') dispatchEvent(new CustomEvent('remote-carve', { detail: m }))
+        const k = m.type === 'cmd' && KEYS[m.cmd]
+        if (k && k.in.includes(phase.current)) dispatchEvent(new KeyboardEvent('keydown', { key: k.key, code: k.code }))
+      },
+    })
+    link.current = l
+    return () => l.close()
   }, [])
 
   const json = JSON.stringify(state)
   useEffect(() => {
-    if (info) fetch(`/remote/state?k=${info.key}`, { method: 'POST', body: json }).catch(() => {})
+    if (info) link.current?.send('state', { state: JSON.parse(json) })
   }, [info, json])
 
-  return { info, phones }
+  // for the dalgona round: ask the relay (and wait for its answer), or tell it
+  const ask = useMemo(() => ({
+    request: (action, body) => link.current?.request(action, body) ?? Promise.reject(new Error('no link')),
+    send: (action, body) => link.current?.send(action, body),
+  }), [])
+
+  return { info, phones, ...ask }
 }
