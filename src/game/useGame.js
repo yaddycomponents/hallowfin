@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { load, save, setRoster, splitQuestion } from './data'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { DEMO, load, playing, save, setRoster, splitQuestion } from './data'
 import { STREAM, drawIndex, newSeed } from './pcg'
 
 // The round, as phases:
@@ -11,17 +11,27 @@ import { STREAM, drawIndex, newSeed } from './pcg'
 const RUN_KEY = 'halloween-dare:run'
 const PRIZE = 100_000_000
 
+const fresh = () => ({ phase: 'lobby', seed: newSeed(), turn: 0, qTurn: 0, dTurn: 0, log: [] })
+
 function loadRun() {
   try { return JSON.parse(localStorage.getItem(RUN_KEY)) } catch { return null }
 }
 
 export function useGame() {
-  const [config, setConfig] = useState(load)
-  const [run, setRun] = useState(() => loadRun() ?? { phase: 'lobby', seed: newSeed(), turn: 0, qTurn: 0, dTurn: 0, log: [] })
+  // setup: the lobby's lists as edited; config: what this game plays with
+  const [setup, setConfig] = useState(load)
+  const [run, setRun] = useState(() => loadRun() ?? fresh())
+  // the real game, kept aside while a demo runs
+  const real = useRef(null)
 
-  useEffect(() => save(config), [config])
-  useEffect(() => { try { localStorage.setItem(RUN_KEY, JSON.stringify(run)) } catch {} }, [run])
+  useEffect(() => save(setup), [setup])
+  // a demo is never saved: a reload mid-demo is back in the real game
+  useEffect(() => { if (!run.demo) try { localStorage.setItem(RUN_KEY, JSON.stringify(run)) } catch {} }, [run])
 
+  const config = useMemo(
+    () => (run.demo ? { ...setup, ...DEMO, hard: false } : { ...setup, players: setup.players.filter(playing) }),
+    [setup, run.demo],
+  )
   const { players, questions, dares } = config
   setRoster(players) // cheap; keeps player numbers unique for this list
   const n = players.length
@@ -98,5 +108,12 @@ export function useGame() {
   // (no auto spin when coming back from the lobby: the host may still be setting up)
   const resume = useCallback(() => setRun((r) => ({ ...(r.log.length > r.turn ? advance(r) : r), phase: r.log.length > r.turn && r.turn + 1 >= n ? 'end' : 'pick', auto: false })), [n])
 
-  return { config, setConfig, run, current, remaining, eliminated, won, to, start, verdict, next, absent, resume, lobby: () => to('lobby') }
+  // the demo: a practice game on the demo cast; the lobby brings the real one back
+  const demo = useCallback(() => setRun((r) => {
+    if (!r.demo) real.current = r
+    return { phase: 'pick', seed: newSeed(), turn: 0, qTurn: 0, dTurn: 0, log: [], auto: false, demo: true }
+  }), [])
+  const lobby = useCallback(() => setRun((r) => ({ ...(r.demo ? real.current ?? fresh() : r), phase: 'lobby' })), [])
+
+  return { config, setup, setConfig, run, current, remaining, eliminated, won, to, start, verdict, next, absent, resume, demo, lobby }
 }

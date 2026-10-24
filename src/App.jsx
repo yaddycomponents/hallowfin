@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useGame } from './game/useGame'
 import { playerNo } from './game/data'
 import { heardAnswer, saidSomething } from './game/match'
-import { music, sfx, sing, stopMusic } from './audio/sound'
+import { music, seekSong, sfx, sing, stopMusic } from './audio/sound'
 import { announce, canListen, hush, listen } from './audio/speech'
 import { Stage } from './scene/Stage'
 import { tileShape } from './scene/NumberFloor'
@@ -34,6 +34,7 @@ export default function App() {
   const g = useGame()
   const { run, config, current } = g
   const phase = run.phase
+  const demo = !!run.demo
   const [left, setLeft] = useState(config.seconds)
   // inside a question: the doll reads it → the clock runs (mic open) → matched
   const [stage, setStage] = useState('reading')
@@ -62,6 +63,9 @@ export default function App() {
     else if (phase === 'end') { stopMusic('redlight'); music('lobby', 0.45) }
     else if (phase === 'pick') { stopMusic('redlight'); stopMusic('lobby', 500); stopMusic('intro', 900) }
     if (phase === 'lobby') hush()
+    // the guards' theme under a dare (if public/audio/dare.mp3 is there)
+    if (phase === 'dare') music('dare', 0.35, { restart: true })
+    else stopMusic('dare', 700)
   }, [phase])
 
   // a name is called: she announces it, then the game waits while the player
@@ -201,7 +205,8 @@ export default function App() {
           return
         }
         setHeard(text)
-        if (heardAnswer(answer, all)) {
+        // a demo: whatever they say, the doll takes it
+        if (demo ? saidSomething(text) : heardAnswer(answer, all)) {
           hit = true
           setStage('matched')
           wait(900).then(() => onVerdict('answered'))
@@ -209,7 +214,7 @@ export default function App() {
       },
     })
     return () => { stop(); setMic('off') }
-  }, [phase, stage, config.mic, config.hard, config.lang, current.question, onVerdict])
+  }, [phase, stage, config.mic, config.hard, config.lang, current.question, onVerdict, demo])
 
   // the guard fires: the bang and the white flash land on the muzzle flash, not the verdict
   useEffect(() => {
@@ -237,10 +242,16 @@ export default function App() {
     return () => removeEventListener('keydown', k)
   }, [canSkip, g.absent])
 
+  const warmMic = () => {
+    if (config.mic && canListen) navigator.mediaDevices?.getUserMedia({ audio: true }).then((s) => s.getTracks().forEach((t) => t.stop()), () => {})
+  }
   const start = (seed) => {
     sfx.unlock()
     // ask for the mic now, not halfway through the first question
-    if (config.mic && canListen) navigator.mediaDevices?.getUserMedia({ audio: true }).then((s) => s.getTracks().forEach((t) => t.stop()), () => {})
+    warmMic()
+    // a new game's first draw rides in from the song's opening, wherever a
+    // demo or the last game left it
+    seekSong('lobby', 0)
     g.start(seed)
   }
   const inGame = phase !== 'lobby'
@@ -263,9 +274,10 @@ export default function App() {
       <Stage phase={phase} watching={watching} roster={roster} />
       {phase === 'lobby' && (
         <Lobby
-          config={config}
+          config={g.setup}
           setConfig={g.setConfig}
           onStart={start}
+          onDemo={() => { sfx.unlock(); warmMic(); seekSong('lobby', 0); g.demo() }}
           canResume={run.log.length > 0 && run.turn < config.players.length}
           onResume={() => { sfx.unlock(); g.resume() }}
         />
@@ -315,7 +327,7 @@ export default function App() {
           />
         </>
       )}
-      {phase === 'end' && <End log={run.log} onLobby={g.lobby} onAgain={() => start()} />}
+      {phase === 'end' && <End log={run.log} onLobby={g.lobby} onAgain={() => (demo ? (seekSong('lobby', 0), g.demo()) : start())} />}
     </>
   )
 }

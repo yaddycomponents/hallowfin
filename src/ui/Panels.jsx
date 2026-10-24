@@ -5,6 +5,7 @@ import { useGSAP } from '@gsap/react'
 import { playerNo } from '../game/data'
 import { music } from '../audio/sound'
 import { Shapes } from './Shapes'
+import { Lyrics } from './Lyrics'
 import { FlapReel, FlapText } from './FlapBoard'
 import { toggleFull, useFullscreen } from './fullscreen'
 import { IconBtn } from './IconBtn'
@@ -17,14 +18,17 @@ gsap.registerPlugin(useGSAP, SplitText)
 const won = (n) => '₩' + n.toLocaleString('en-US')
 
 export function Hud({ run, remaining, total, prize, onLobby, config, setConfig, listening = false }) {
+  // a demo ends here (back to the real game); a game is kept, to resume
+  const home = run.demo ? 'End the demo' : 'Back to the lobby'
   const toggle = (key) => setConfig((c) => ({ ...c, [key]: !c[key] }))
   const full = useFullscreen()
   const digits = String(total).length
   return (
     <div className="hud">
-      <button className="logo small" onClick={onLobby} title="Back to the lobby">SQU<span className="tri">△</span>D <span className="pink">DARE</span></button>
+      <button className="logo small" onClick={onLobby} title={home}>SQU<span className="tri">△</span>D <span className="pink">DARE</span></button>
       <div className="hud-right">
         <div className="hud-icons">
+          <IconBtn icon={Home} label={home} onClick={onLobby} />
           <IconBtn icon={config.voice ? Volume2 : VolumeX} label={config.voice ? 'Doll voice on' : 'Doll voice off'} on={config.voice} onClick={() => toggle('voice')} />
           {config.mic
             ? <MicMeter listening={listening} onClick={() => toggle('mic')} />
@@ -95,8 +99,9 @@ export function PickPanel({ remaining, target, onLanded, phase, auto = false }) 
     if (phase !== 'pick' || busy.current) return
     busy.current = true
     setRunning(true)
-    // the merry-go-round song plays for the ride (it stops once a name is called)
-    music('lobby', 0.45)
+    // the merry-go-round song plays for the ride (it stops once a name is
+    // called); the last player left has no ride, so no song
+    if (items.length > 1) music('lobby', 0.45)
     reel.current?.spin(index)
   }
 
@@ -117,6 +122,7 @@ export function PickPanel({ remaining, target, onLanded, phase, auto = false }) 
     <div className={`panel pick ${phase}`}>
       <FlapReel ref={reel} bare items={items} onDone={onLanded} onTick={() => dispatchEvent(new Event('flap-tick'))} />
       {phase === 'pick' && <SpinButton running={running} onClick={spin} />}
+      {phase === 'pick' && running && items.length > 1 && <Lyrics />}
     </div>
   )
 }

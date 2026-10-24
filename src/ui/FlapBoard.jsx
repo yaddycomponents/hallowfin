@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { sfx, songAt } from '../audio/sound'
+import { seekSong, sfx, songAt } from '../audio/sound'
 import { playerNo } from '../game/data'
 
 // A split-flap board, like the dorm's player counter. Each tile keeps the
@@ -36,15 +36,25 @@ export function FlapText({ text, width = text.length, dur = 180, className = '' 
 // second-to-last name up for ~1.8 s, which looked like the landing. Quadratic
 // still slows into the stop, but the last few names keep moving.
 const ease = (x) => 1 - Math.pow(1 - x, 2)
-// The lobby song (Mingle, "round and round"), measured from the file: 104.75 BPM,
-// first beat 0.435 s in. The floor's shuffle rides it like a merry-go-round:
-// quick on the half-beats, then on the beat, then every other beat into the stop.
-const BEAT = 60 / 104.75
-const FIRST_BEAT = 0.435
-// the song's quiet opening ends here (bar 3, beat 1): a first spin winds up
-// slowly through it and the ride proper rolls in with the theme
-const THEME_IN = FIRST_BEAT + 8 * BEAT
-const RIDE = [...Array(10).fill(0.5), ...Array(4).fill(1), ...Array(3).fill(2)] // in beats; ~7.7 s
+// The lobby song (Mingle, "round and round"), fitted to the whole file:
+// 104.96 BPM, first beat 0.43 s in (stays within ~30 ms of the beat to the end;
+// the 104.75 read off the opening drifted ~130 ms late by the last bars).
+export const BEAT = 60 / 104.96
+export const FIRST_BEAT = 0.43
+const beatAt = (b) => FIRST_BEAT + b * BEAT
+// "손뼉을" (clap your hands!): sung twice in the song, at 18.2 s and 54.2 s
+// (the singing comes in at 9 s, after the sax). Every draw lands on one, like
+// the game's number call: the first draw on the first, the rest on the second.
+export const CLAPS = [31, 94]
+// The floor's shuffle rides into it like a merry-go-round: it gets going on
+// the beat, spins on the half-beats, then slows (on the beat, every other
+// beat) into the stop; the last tick is the clap. Long enough to make people
+// nervous.
+const RIDE = [...Array(4).fill(1), ...Array(16).fill(0.5), ...Array(4).fill(1), ...Array(3).fill(2)] // 22 beats, ~12.6 s
+const SPAN = RIDE.reduce((a, b) => a + b)
+// later draws jump the song to this many beats before the ride, so it's
+// playing (and faded up) before the floor moves
+const LEAD_IN = 2
 
 // The name reel as a flap board: same spin as before (lands exactly on the
 // drawn player, at least ~3 laps), but shows one name at a time, flipping.
@@ -57,6 +67,7 @@ export const FlapReel = forwardRef(function FlapReel({ items, onDone, onTick, ms
   const [spinning, setSpinning] = useState(false)
   const pos = useRef(0)
   const raf = useRef()
+  const wait = useRef()
   const n = items.length
   // cells: wide enough for the longest name, within reason
   const width = Math.min(20, Math.max(10, ...items.map((p) => p.name.length)))
@@ -68,10 +79,29 @@ export const FlapReel = forwardRef(function FlapReel({ items, onDone, onTick, ms
       // bare: nothing to read, so no need to pass every name (with 81 that was
       // ~60 clacks a second). The ride: ticks on the song's own beat grid.
       if (bare) {
+        // one player left: nothing to shuffle; a beat of quiet, then theirs
+        if (n === 1) {
+          clearTimeout(wait.current)
+          wait.current = setTimeout(() => {
+            sfx.land()
+            dispatchEvent(new CustomEvent('reel-land', { detail: items[0].i }))
+            onDone?.(items[0])
+          }, 700)
+          return
+        }
+        // which clap: a song still at its opening (the game's first draw) plays
+        // on through the intro into the first clap; every later draw jumps to
+        // just before the second, mid-song, so it never sounds like a restart
+        let song = songAt('lobby')
+        const fresh = !song || song.time <= beatAt(CLAPS[0] - SPAN - LEAD_IN)
+        const clap = fresh ? CLAPS[0] : CLAPS[1]
+        if (song && !fresh) {
+          seekSong('lobby', beatAt(clap - SPAN - LEAD_IN))
+          song = songAt('lobby')
+        }
         // tick times in song seconds, read off the song itself (play() is async,
         // so right now it may not have started); no song: off the wall clock
-        const song = songAt('lobby')
-        const from = song ? song.time : 0
+        const from = song ? song.time : beatAt(clap - SPAN - LEAD_IN)
         const t0 = performance.now()
         const clock = () => {
           const at = songAt('lobby')
@@ -80,24 +110,16 @@ export const FlapReel = forwardRef(function FlapReel({ items, onDone, onTick, ms
           const waited = (performance.now() - t0) / 1000
           return song && waited < 1.5 ? null : from + waited
         }
-        // the next half-beat on the song's grid, and never before the theme is in
-        const half = BEAT / 2
-        let t = song ? Math.max(THEME_IN, FIRST_BEAT + Math.ceil((from - FIRST_BEAT) / half) * half) : 0
-        // while the opening plays, the carousel winds up: a tick on every beat
-        // from the next one, so the floor moves the moment it's pressed
+        // before the ride (the opening, on a first draw) the carousel winds up
+        // a tick a beat, so the floor moves the moment it's pressed
         const lead = []
-        for (let b = FIRST_BEAT + Math.ceil((from - FIRST_BEAT) / BEAT) * BEAT; b < t - 0.01; b += BEAT) lead.push(b)
-        const ticks = [...lead, ...RIDE.map((b) => { const now = t; t += b * BEAT; return now })]
-        // the song loops: count the laps so a wrap mid-ride doesn't jump back
-        let lap = 0, prev = from
+        for (let b = Math.ceil((from - FIRST_BEAT) / BEAT); b < clap - SPAN; b++) lead.push(beatAt(b))
+        let at = clap - SPAN
+        const ride = [beatAt(at), ...RIDE.map((b) => beatAt((at += b)))]
+        const ticks = [...lead, ...ride]
         let next = 0
         const step = () => {
-          let now = clock()
-          if (now != null) {
-            if (now < prev - 1) lap += song.duration
-            prev = now
-            now += lap
-          }
+          const now = clock()
           while (now != null && next < ticks.length && now >= ticks[next]) {
             dispatchEvent(new CustomEvent('reel-at', { detail: next }))
             next++
@@ -149,7 +171,7 @@ export const FlapReel = forwardRef(function FlapReel({ items, onDone, onTick, ms
     },
   }), [items, n, ms, onDone, onTick, bare])
 
-  useEffect(() => () => cancelAnimationFrame(raf.current), [])
+  useEffect(() => () => { cancelAnimationFrame(raf.current); clearTimeout(wait.current) }, [])
 
   if (bare) return null
   return (

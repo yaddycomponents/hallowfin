@@ -43,6 +43,35 @@ export const DEFAULTS = {
   hard: true, // one shot: the first thing a player says is their answer, matched strictly
 }
 
+// The demo: the whole flow on a practice cast, to show the team how it's
+// played. Questions the host can answer; in a demo the doll takes any answer.
+export const DEMO = {
+  players: ['Seong Gi-hun', 'Cho Sang-woo', 'Kang Sae-byeok', 'Oh Il-nam', 'Ji-yeong', 'Abdul Ali', 'Jang Deok-su', 'Han Mi-nyeo', 'Hwang Jun-ho'],
+  questions: [
+    "What colour is the doll's dress? | Orange",
+    'How many shapes are on the recruiter\'s card? | Three: circle, triangle, square',
+    'What colour are the guards\' suits? | Pink',
+    'What game does the doll play? | Red light, green light',
+    'What do you do when the doll turns round? | Freeze: not a word',
+  ],
+  dares: [
+    'Take a bow to the room',
+    'Do your best Young-hee turn: slow, then snap',
+    'High-five the host',
+  ],
+  seconds: 20,
+}
+
+// The host runs the game from the laptop, so they're never drawn, even when
+// the team's list has them on it. Kept as hashes of the name's words.
+const fnv = (w) => {
+  let x = 0x811c9dc5
+  for (const c of w) x = Math.imul(x ^ c.charCodeAt(0), 0x01000193) >>> 0
+  return x.toString(36)
+}
+const HOST = new Set(['1xei24v', 'czbltu'])
+export const playing = (name) => !name.toLowerCase().split(/[^a-z]+/).some((w) => HOST.has(fnv(w)))
+
 const KEY = 'halloween-dare:v1'
 
 // a list item without its bullet(s): "- Name", "- - Name", "1. Name", "• Name"

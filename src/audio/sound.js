@@ -3,6 +3,7 @@
 // missing it is skipped silently.
 //   public/audio/lobby.mp3     — loops in the lobby and while picking (e.g. "Way Back Then")
 //   public/audio/redlight.mp3  — plays while the question timer runs (the doll's song)
+//   public/audio/dare.mp3      — loops under a dare (e.g. "Pink Soldiers")
 
 let ctx = null
 export const ac = () => (ctx ??= new (window.AudioContext || window.webkitAudioContext)())
@@ -61,11 +62,17 @@ export const sfx = {
   unlock: () => ac().resume(),
 }
 
+// where a song picks up when it comes round again: the lobby song's sax
+// intro is for the start only, so it loops back to where the singing comes in
+const LOOP_FROM = { lobby: 9.0 }
+
 const tracks = {}
 function track(name) {
   if (!tracks[name]) {
     const a = new Audio(`/audio/${name}.mp3`)
-    a.loop = true
+    const from = LOOP_FROM[name]
+    a.loop = from == null
+    if (from != null) a.addEventListener('ended', () => { a.currentTime = from; a.play().catch(() => {}) })
     a.preload = 'auto'
     a.volume = 0
     a.onerror = () => { a.dataset.missing = '1' }
@@ -107,6 +114,12 @@ export function songTime(name) {
 export function songAt(name) {
   const a = tracks[name]
   return a && !a.dataset.missing ? { time: a.currentTime, playing: !a.paused, duration: a.duration || Infinity } : null
+}
+
+// move a song to a point (playing or not), e.g. a few bars before a cue
+export function seekSong(name, t) {
+  const a = tracks[name]
+  if (a && !a.dataset.missing) a.currentTime = t
 }
 
 export function stopMusic(name, ms = 600) {
