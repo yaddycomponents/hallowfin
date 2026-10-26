@@ -11,6 +11,7 @@ import { useRemote } from './remote/useRemote'
 import { GLYPH, NAMES } from './game/dalgona'
 import { DalgonaPanel } from './ui/Dalgona'
 import { ShapeBtn } from './ui/ShapeBtn'
+import { Confetti } from './ui/Confetti'
 import { IconBtn } from './ui/IconBtn'
 import { UserX } from 'lucide-react'
 import { Called, End, Hud, PenaltyCard, PickPanel, QuestionPanel, Stamp } from './ui/Panels'
@@ -365,6 +366,7 @@ export default function App() {
       )}
       {phase === 'survived' && (
         <>
+          <Confetti key={run.turn} />
           <Stamp kind="survived" />
           <ShapeBtn shape="next" className="next-slot" label="Next player" keyName="Space" onClick={() => { hush(); g.next() }} />
         </>
@@ -372,6 +374,9 @@ export default function App() {
       {(phase === 'eliminated' || phase === 'dare') && (
         <>
           <Stamp kind="eliminated" small={phase === 'dare'} />
+          {!run.log.at(-1)?.dalgona && current.question?.a && (
+            <div className="reveal"><span>The answer was</span><b>{current.question.a.split(/\s*\/\s*/).join(' · ')}</b></div>
+          )}
           {phase === 'eliminated' && shots > 0 && <div key={shots} className="shot-flash" />}
           <PenaltyCard
             key={run.turn}

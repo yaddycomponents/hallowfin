@@ -35,6 +35,8 @@ Deploy or update the AWS side (CDK, in `infra/`; writes `public/backend.js`):
     AWS_PROFILE=<profile> npx cdk bootstrap     # once per account and region
     AWS_PROFILE=<profile> npm run deploy
 
+How it all fits together, step by step: [arch.md](arch.md).
+
 `npm run destroy` (in `infra/`) removes it all. It costs fractions of a cent
 per party: you pay per message and per connected minute, and every session
 expires by itself.

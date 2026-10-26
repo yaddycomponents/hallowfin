@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { Smartphone } from 'lucide-react'
 import { IconBtn } from './IconBtn'
@@ -13,6 +13,15 @@ export function RemoteBtn({ remote }) {
   useEffect(() => {
     if (url) QRCode.toDataURL(url, { margin: 1, width: 520, color: { dark: '#0b0d0f', light: '#ffffff' } }).then(setQr)
   }, [url])
+  // a phone just joined: let the host see "connected", then close by itself
+  const seen = useRef(remote.phones)
+  useEffect(() => {
+    const joined = remote.phones > seen.current
+    seen.current = remote.phones
+    if (!open || !joined) return
+    const t = setTimeout(() => setOpen(false), 1200)
+    return () => clearTimeout(t)
+  }, [remote.phones, open])
   if (!remote.info) return null
   const n = remote.phones
   const local = remote.info.where === 'local'
