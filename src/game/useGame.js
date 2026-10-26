@@ -18,7 +18,11 @@ const PRIZE = 100_000_000
 const fresh = () => ({ phase: 'lobby', seed: newSeed(), turn: 0, qTurn: 0, dTurn: 0, log: [] })
 
 function loadRun() {
-  try { return JSON.parse(sessionStorage.getItem(RUN_KEY)) } catch { return null }
+  try {
+    const r = JSON.parse(sessionStorage.getItem(RUN_KEY))
+    // the game chooser is a doorway, not a place: a reload there is back in the lobby
+    return r?.phase === 'choose' ? { ...r, phase: 'lobby' } : r
+  } catch { return null }
 }
 
 export function useGame() {

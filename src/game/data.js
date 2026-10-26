@@ -37,7 +37,7 @@ export const DEFAULTS = {
     'Two sour candies at once',
     'Let the person on your left pick your next sour candy',
   ],
-  seconds: 20,
+  seconds: 30,
   mic: true, // players answer out loud (Chrome speech recognition)
   voice: true, // the doll reads questions and calls players
   lang: 'en-IN', // recogniser accent
@@ -60,7 +60,7 @@ export const DEMO = {
     'Do your best Young-hee turn: slow, then snap',
     'High-five the host',
   ],
-  seconds: 20,
+  seconds: 30,
 }
 
 // The host runs the game from the laptop, so they're never drawn, even when
@@ -82,7 +82,8 @@ export function load() {
   try {
     const s = JSON.parse(sessionStorage.getItem(KEY))
     // older saves may hold names with a bullet still on them
-    if (s && Array.isArray(s.players)) return { ...DEFAULTS, ...s, players: s.players.map(bare).filter(Boolean) }
+    // and the old 20 s clock, now 30
+    if (s && Array.isArray(s.players)) return { ...DEFAULTS, ...s, ...(s.seconds === 20 && { seconds: DEFAULTS.seconds }), players: s.players.map(bare).filter(Boolean) }
   } catch {}
   return DEFAULTS
 }

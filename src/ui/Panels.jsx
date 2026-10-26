@@ -197,7 +197,7 @@ const MIC_SAYS = {
 }
 
 // The clock: a dial of 60 ticks that go dark as time runs out
-function Dial({ left, seconds, red }) {
+export function Dial({ left, seconds, red }) {
   const lit = Math.ceil((left / seconds) * 60)
   return (
     <div className={`dial ${red ? 'red' : ''} ${left <= 5 && left > 0 ? 'pulse' : ''}`}>

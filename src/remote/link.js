@@ -9,6 +9,18 @@
 // laptop, API Gateway's 2-hour limit) comes back to the same session.
 const AWS = typeof window !== 'undefined' ? window.SQUID_WS : null
 const LOCAL = import.meta.env.DEV ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/remote-ws` : null
+// Under `npm run dev`, the relay's phone links (made for the live site) point
+// at this laptop instead, so the phone gets the pages being worked on
+const HERE = import.meta.env.DEV ? `${location.protocol}//${__LAN__}:${location.port}` : null
+// (and the laptop's own relay, if that's the one in use, by its Wi-Fi address:
+// "localhost" on a phone is the phone)
+const here = (u) => {
+  if (!HERE) return u
+  const url = new URL(u.slice(new URL(u).origin.length), HERE)
+  const w = url.searchParams.get('w')
+  if (w) { const r = new URL(w); r.hostname = __LAN__; url.searchParams.set('w', r.href) }
+  return url.href
+}
 const WAIT = 4000 // ms to reach a relay before trying the next
 
 export function openLink({ onSession, onMessage }) {
@@ -32,6 +44,7 @@ export function openLink({ onSession, onMessage }) {
       ws = sock
       sock.onmessage = (e) => {
         const m = JSON.parse(e.data)
+        if (m.urls) m.urls = m.urls.map(here)
         if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); return }
         onMessage(m)
       }
@@ -47,7 +60,9 @@ export function openLink({ onSession, onMessage }) {
   })
 
   async function start() {
-    for (const [url, where] of [[AWS, 'aws'], [LOCAL, 'local']]) {
+    // dev: the laptop's relay first (AWS turns away phone pages not on the live site)
+    const relays = LOCAL ? [[LOCAL, 'local'], [AWS, 'aws']] : [[AWS, 'aws']]
+    for (const [url, where] of relays) {
       if (closed) return
       if (url && (await attempt(url, where))) return
     }

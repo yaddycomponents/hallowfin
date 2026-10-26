@@ -12,6 +12,10 @@ import { GLYPH, NAMES } from './game/dalgona'
 import { DalgonaPanel } from './ui/Dalgona'
 import { ShapeBtn } from './ui/ShapeBtn'
 import { Confetti } from './ui/Confetti'
+import { Chooser } from './ui/Chooser'
+import { WhoAmI } from './whoami/WhoAmI'
+import { useWhoAmI } from './whoami/useWhoAmI'
+import { TEAMS } from './whoami/cards'
 import { IconBtn } from './ui/IconBtn'
 import { UserX } from 'lucide-react'
 import { Called, End, Hud, PenaltyCard, PickPanel, QuestionPanel, Stamp } from './ui/Panels'
@@ -36,6 +40,7 @@ function chant() {
 
 export default function App() {
   const g = useGame()
+  const who = useWhoAmI(g.config.players)
   // the draw is riding the song (the phone shows Stop the music)
   const [drawing, setDrawing] = useState(false)
   const { run, config, current } = g
@@ -287,12 +292,29 @@ export default function App() {
     seekSong('lobby', 0)
     g.start(seed)
   }
-  const inGame = phase !== 'lobby'
+  // the game chooser, and Who Am I, sit outside the quiz's own phases
+  const inGame = !['lobby', 'choose', 'whoami'].includes(phase)
+  // back in Who Am I with no game kept (an old save was dropped): a fresh one
+  useEffect(() => { if (phase === 'whoami' && !who.w) who.again() }, [phase, who.w])
+  const choose = (game) => {
+    if (game === 'squid') return start(run.chosenSeed)
+    sfx.unlock()
+    who.again()
+    g.to('whoami')
+  }
 
   // the phone remote: what it shows. Who's up only once they're called (the
   // draw is decided before the spin; the phone mustn't spoil it)
-  const called = !['lobby', 'pick', 'end'].includes(phase)
-  const remote = useRemote({
+  const called = inGame && !['pick', 'end'].includes(phase)
+  const wstep = who.w?.step
+  const remote = useRemote(phase === 'whoami' && who.w ? {
+    phase: `w-${wstep}`,
+    team: `${TEAMS[who.team].name}`,
+    shape: TEAMS[who.team].shape,
+    scores: who.w.scores,
+    card: wstep === 'play' && who.card ? who.card.word : '',
+    got: who.w.got.length,
+  } : {
     phase,
     demo,
     spinning: phase === 'pick' && drawing,
@@ -324,11 +346,13 @@ export default function App() {
   return (
     <>
       <Stage phase={phase} watching={watching} roster={roster} />
+      {phase === 'choose' && <Chooser onChoose={choose} onLobby={g.lobby} />}
+      {phase === 'whoami' && <WhoAmI g={who} onLobby={g.lobby} remote={remote} />}
       {phase === 'lobby' && (
         <Lobby
           config={g.setup}
           setConfig={g.setConfig}
-          onStart={start}
+          onStart={(seed) => g.to('choose', { chosenSeed: seed })}
           remote={remote}
           onDemo={() => { sfx.unlock(); warmMic(); seekSong('lobby', 0); g.demo() }}
           canResume={run.log.length > 0 && run.turn < config.players.length}

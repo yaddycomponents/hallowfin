@@ -68,6 +68,19 @@
   .trail svg { width: 18px; height: 18px; flex: none; stroke: #fff; stroke-width: 9; fill: none; }
   @keyframes run { to { transform: translateX(-50%); } }
 
+  .game1, .wnext, .got { background: linear-gradient(170deg, var(--teal), var(--teal-d)); box-shadow: 0 10px 30px rgba(3,122,118,.35); }
+  .game2, .skip { background: linear-gradient(170deg, var(--pink), var(--pink-d)); box-shadow: 0 10px 30px rgba(237,27,118,.35); }
+  .game1, .game2, .got, .skip { min-height: 150px; }
+  .game1 svg, .game2 svg { fill: none; stroke: #fff; stroke-width: 9; }
+  .pad.two .wend { grid-column: span 2; min-height: 64px; background: #1c1c20; border: 1px solid var(--line); }
+  .wcard { margin-top: 14px; padding: 18px; border-radius: 16px; background: #fff; color: #111; text-align: center; font: 400 40px/1.1 var(--num); letter-spacing: .03em; }
+  .wcard .lbl { display: block; margin-bottom: 6px; font: 700 11px var(--body, sans-serif); letter-spacing: .22em; color: #888; }
+  .wcard small { display: block; margin-top: 6px; font: 600 13px var(--body, sans-serif); color: #666; letter-spacing: 0; }
+  .wscores { display: flex; gap: 10px; margin-top: 14px; }
+  .wscores span { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 12px; background: #1c1c20; border: 1px solid var(--line); }
+  .wscores span.up { border-color: var(--pink); box-shadow: 0 0 0 1px var(--pink) inset; }
+  .wscores svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 10; }
+  .wscores b { font: 400 26px/1 var(--num); }
   .wait { text-align: center; padding: 34px 0; }
   .wait .ko { font: 400 22px/1.2 var(--ko); }
   .wait .en { margin-top: 8px; font-size: 14px; color: var(--dim); line-height: 1.4; }
@@ -119,11 +132,21 @@
     survived: [['next', PLAY, '다음 참가자', 'Next player'], ['music', '', '음악 정지', 'Stop music']],
     dare: [['next', PLAY, '다음 참가자', 'Next player'], ['music', '', '음악 정지', 'Stop music']],
     end: [['music', '', '음악 정지', 'Stop music']],
+    // the game chooser
+    choose: [['game1', SHAPE.o, '게임 1', 'Squid Dare'], ['game2', SHAPE.t, '게임 2', 'Who Am I?']],
+    // Who Am I
+    'w-rules': [['wnext', PLAY, '시작', 'Call the team']],
+    'w-called': [['wnext', PLAY, '시작', 'Start the clock'], ['music', '', '음악 정지', 'Stop music']],
+    'w-play': [['got', O, '정답', 'Got it'], ['skip', X, '패스', 'Skip'], ['wend', '', '턴 종료', 'End the turn']],
+    'w-score': [['wnext', PLAY, '다음 팀', 'Next team']],
+    'w-final': [['music', '', '음악 정지', 'Stop music']],
   }
   const LABEL = {
     lobby: ['대기실', 'Waiting room'], pick: ['어울림 게임', 'The draw'], picked: ['호명', 'Player called'],
     question: ['문제', 'Question'], dalgona: ['달고나', 'Dalgona'], redlight: ['무궁화 꽃이 피었습니다', 'Red light'],
     survived: ['생존', 'Survived'], eliminated: ['탈락', 'Eliminated'], dare: ['벌칙', 'Penalty'], end: ['게임 종료', 'Game over'],
+    choose: ['게임 선택', 'Choose the game'],
+    'w-rules': ['규칙', 'The rules'], 'w-called': ['준비', 'Team up'], 'w-play': ['나는 누구?', 'Who am I?'], 'w-score': ['점수', 'Turn score'], 'w-final': ['결과', 'Results'],
   }
 
   let game = true // false once the game's tab has closed: the session is over
@@ -139,11 +162,13 @@
       if (s.answer) card += `<div class="a">${esc(s.answer)}</div>`
     }
     if (s?.dare && (phase === 'eliminated' || phase === 'dare')) card += `<div class="q">${esc(s.dare)}</div>`
+    if (s?.card && phase === 'w-play') card += `<div class="wcard"><span class="lbl">ON SCREEN · 화면</span>${esc(s.card)}<small>${s.got} this turn</small></div>`
+    if (s?.scores) card += `<div class="wscores">${s.scores.map((n, k) => `<span class="${'ots'[k] === s.shape && phase !== 'w-final' ? 'up' : ''}">${SHAPE['ots'[k]]}<b>${n}</b></span>`).join('')}</div>`
     if (s?.total) card += `<div class="count"><b>${String(s.remaining).padStart(3, '0')}</b><span>of ${s.total} players remain</span></div>`
     $('card').innerHTML = card
 
     const pad = game ? (phase === 'pick' && s?.spinning ? PADS.stop : PADS[phase]) : null
-    $('pad').className = 'pad' + (['question', 'redlight', 'dalgona', 'picked'].includes(phase) && game ? ' two' : '')
+    $('pad').className = 'pad' + (['question', 'redlight', 'dalgona', 'picked', 'choose', 'w-play', 'w-called'].includes(phase) && game ? ' two' : '')
     $('pad').innerHTML = pad
       ? pad.map(([cmd, icon, ko, en]) => `<button class="${cmd}" data-cmd="${cmd === 'stop' ? 'music' : cmd}">${icon}<span class="ko">${ko}</span><span class="en">${en}</span></button>`).join('')
       : !game

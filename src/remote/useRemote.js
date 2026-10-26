@@ -12,7 +12,15 @@ const KEYS = {
   absent: { key: 'n', code: 'KeyN', in: ['picked'] },
   pass: { key: 'a', code: 'KeyA', in: ['question', 'redlight', 'dalgona'] },
   fail: { key: 'f', code: 'KeyF', in: ['question', 'redlight', 'dalgona'] },
-  music: { key: 'm', code: 'KeyM', in: ['pick', 'picked', 'survived', 'eliminated', 'dare', 'end'] },
+  music: { key: 'm', code: 'KeyM', in: ['pick', 'picked', 'survived', 'eliminated', 'dare', 'end', 'w-called', 'w-play', 'w-final'] },
+  // the game chooser
+  game1: { key: '1', code: 'Digit1', in: ['choose'] },
+  game2: { key: '2', code: 'Digit2', in: ['choose'] },
+  // Who Am I
+  wnext: { key: ' ', code: 'Space', in: ['w-rules', 'w-called', 'w-score'] },
+  got: { key: 'a', code: 'KeyA', in: ['w-play'] },
+  skip: { key: 's', code: 'KeyS', in: ['w-play'] },
+  wend: { key: 'e', code: 'KeyE', in: ['w-play'] },
 }
 
 // state: what the phone shows (who's up, the question and its answer)
