@@ -32,6 +32,7 @@
   .cover .shape { font-size: 84px; line-height: 1; color: #e7b459; }
   .cover button { border: 0; border-radius: 999px; padding: 18px 40px; background: var(--pink); color: #fff; font: 400 30px/1 'Bebas Neue', sans-serif; letter-spacing: .08em; box-shadow: 0 10px 34px rgba(237,27,118,.45); }
   .cover.win h1 { color: var(--green); }
+  #confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 10; }
   .cover.lose h1 { color: var(--pink); }
   .shake { animation: shake .35s; }
   @keyframes shake { 20% { transform: translateX(-8px) rotate(-1deg); } 40% { transform: translateX(7px) rotate(1deg); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
@@ -327,8 +328,54 @@
     if (m.type === 'tick') { $('time').textContent = Math.ceil(m.left); $('time').classList.toggle('low', m.left <= 10) }
     if (m.type === 'over') {
       over = true; ws.close()
-      shattered.then(() => cover(m.result === 'passed' ? '<h1>Survived</h1><p>You carved it out. ○</p>' : m.result === 'failed' ? '<h1>Eliminated</h1><p>✕</p>' : '<h1>Round over</h1>', m.result === 'passed' ? 'win' : 'lose'))
+      shattered.then(() => {
+        cover(m.result === 'passed' ? '<h1>Survived</h1><p>You carved it out. ○</p>' : m.result === 'failed' ? '<h1>Eliminated</h1><p>✕</p>' : '<h1>Round over</h1>', m.result === 'passed' ? 'win' : 'lose')
+        if (m.result === 'passed') confetti()
+      })
     }
+  }
+
+  // a burst of ○ △ □ confetti from the bottom corners (the big screen does the same)
+  function confetti() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const cv = document.createElement('canvas')
+    cv.id = 'confetti'
+    document.body.append(cv)
+    const x = cv.getContext('2d')
+    const dpr = Math.min(devicePixelRatio || 1, 2)
+    const w = (cv.width = innerWidth * dpr), h = (cv.height = innerHeight * dpr)
+    const COLORS = ['#ed1b76', '#0aa39d', '#f6f2ea', '#22d37a', '#c9a66b'], LIFE = 4200
+    const bits = Array.from({ length: 110 }, (_, i) => {
+      const left = i % 2 === 0
+      const a = ((left ? -65 : -115) + (Math.random() - 0.5) * 40) * Math.PI / 180
+      const v = (11 + Math.random() * 9) * dpr
+      return { x: left ? 0 : w, y: h, vx: Math.cos(a) * v, vy: Math.sin(a) * v, size: (7 + Math.random() * 6) * dpr,
+        spin: (Math.random() - 0.5) * 0.3, turn: Math.random() * Math.PI, color: COLORS[i % 5], kind: i % 3, delay: Math.random() * 250 }
+    })
+    const t0 = performance.now()
+    const draw = (now) => {
+      const t = now - t0
+      x.clearRect(0, 0, w, h)
+      x.globalAlpha = Math.max(0, Math.min(1, (LIFE - t) / 800))
+      for (const b of bits) {
+        if (t < b.delay) continue
+        b.vy += 0.3 * dpr; b.vx *= 0.985; b.vy *= 0.985
+        b.x += b.vx; b.y += b.vy; b.turn += b.spin
+        x.save(); x.translate(b.x, b.y); x.rotate(b.turn)
+        x.scale(1, Math.abs(Math.cos(b.turn * 1.7)) * 0.7 + 0.3)
+        x.strokeStyle = x.fillStyle = b.color; x.lineWidth = b.size / 4
+        const r = b.size / 2
+        x.beginPath()
+        if (b.kind === 0) { x.arc(0, 0, r * 0.8, 0, Math.PI * 2); x.stroke() }
+        else if (b.kind === 1) { x.moveTo(0, -r); x.lineTo(r, r * 0.8); x.lineTo(-r, r * 0.8); x.closePath(); x.fill() }
+        else { x.rect(-r * 0.8, -r * 0.8, r * 1.6, r * 1.6); x.stroke() }
+        x.restore()
+      }
+      if (t < LIFE) requestAnimationFrame(draw)
+      else cv.remove()
+    }
+    requestAnimationFrame(draw)
+    navigator.vibrate?.([60, 40, 60])
   }
 
   addEventListener('resize', size)
